@@ -1071,3 +1071,358 @@ traj-analyze-rllm 子 agent 同样需要进度跟踪（phase_1_load → phase_2_
 | 关系 | 正交，叠加 | 同上 |
 
 进度监控不破坏上下文隔离：父对话读取的是**进度数据**（phase/step/reward），不是**训练细节**（config.json 内容、trajectory 具体内容）。
+
+### 17.9 方案评估（已废弃）
+
+> **Section 17 的 File-based Progress Tracking 方案已被 Section 18 的双 CLI 架构替代。**
+
+traj-loop v1 实测（2 轮自动优化）暴露了此方案的根本缺陷：
+
+| 问题 | 原因 | 影响 |
+|------|------|------|
+| 进度轮询无法执行 | Agent 工具是同步阻塞的，父对话在子 agent 运行期间被挂起 | 核心功能完全失效 |
+| 进度文件格式不一致 | 子 agent 对格式的遵循取决于 prompt 措辞，无强制约束 | Round 1 和 Round 2 的 progress 字段结构不同 |
+| 轨迹重复膨胀 | TrajectoryWriter 追加模式 + 重复分割 | 61 → 159 条轨迹 |
+| 单进程编排 | 训练和优化耦合在一个对话中 | 无法独立调试，上下文窗口压力大 |
+
+结论：单 CLI + Agent 子 agent 的架构无法同时满足上下文隔离和进度可观测性。需要从架构层面拆分为双 CLI。
+
+## 18. 双 CLI 架构设计（替代 traj-loop）
+
+### 18.1 设计动机
+
+Section 17 的方案试图在单个 Claude Code CLI 中通过 Agent 子 agent 实现上下文隔离和进度可观测性。实测证明这条路不通：Agent 工具同步阻塞，父对话无法在子 agent 运行期间做任何事情。
+
+新方案将系统拆分为 **2 个执行模块** 和 **2 个数据模块**：
+
+| 类型 | 模块 | 职责 |
+|------|------|------|
+| 执行模块 | 训练 Agent (CLI-1) | 执行 rllm-xx skills，产出训练结果和轨迹 |
+| 执行模块 | 优化 Agent (CLI-2) | 执行 traj-xx skills，分析轨迹，优化训练 skills |
+| 数据模块 | 轨迹存储 (trajectory/output/) | CLI-1 通过 hooks 写入，CLI-2 读取分析 |
+| 数据模块 | Skill Bank (skill-bank/) | CLI-2 写入 patch 并编译，CLI-1 读取编译后的 SKILL.md |
+
+### 18.2 架构图
+
+```
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│  CLI-1: 训练 Agent           │     │  CLI-2: 优化 Agent           │
+│  (Terminal 1)                │     │  (Terminal 2)                │
+│                              │     │                              │
+│  /rllm-train "round=1|..."  │     │  /traj-train-optimize round=1│
+│    ├─ rllm-clarify           │     │    ├─ traj-segment           │
+│    ├─ rllm-config            │     │    ├─ traj-analyze-rllm      │
+│    ├─ rllm-run               │     │    ├─ traj-optimize          │
+│    ├─ rllm-monitor           │     │    └─ compile                │
+│    ├─ rllm-analyze           │     │                              │
+│    └─ 写入 round status      │     │  更新 round status           │
+│                              │     │                              │
+└──────────┬───────────────────┘     └──────────┬────────────────────┘
+           │                                     │
+           │  writes (hooks)                     │  reads
+           ▼                                     ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    轨迹存储 (trajectory/output/)                   │
+│  rllm/raw/{session}/events.jsonl    CLI-1 hooks 写入              │
+│  rllm/trajectories/                 CLI-2 traj-segment 写入       │
+│  rllm/reports/                      CLI-2 traj-analyze 写入       │
+│  rounds/round_{n}/status.json       CLI-1 & CLI-2 协调文件        │
+└──────────────────────────────────────────────────────────────────┘
+           │                                     │
+           │  reads (SKILL.md)                   │  writes (patch + compile)
+           ▼                                     ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    Skill Bank (skill-bank/)                       │
+│  rllm/rllm-config/patches/         CLI-2 traj-optimize 写入      │
+│  rllm/rllm-monitor/patches/        CLI-2 traj-optimize 写入      │
+│  .claude/skills/*/SKILL.md          CLI-2 compile.py 写入         │
+│                                     CLI-1 读取执行                │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 18.3 与 Section 17 方案的对比
+
+| 维度 | Section 17 (单 CLI + Agent) | Section 18 (双 CLI) |
+|------|---------------------------|---------------------|
+| 上下文隔离 | Agent 子 agent（逻辑隔离） | 独立进程（物理隔离） |
+| 进度可观测 | 文件轮询（无法实现） | 各自终端直接可见 |
+| 调试体验 | 黑盒，只能看最终结果 | 两个终端独立调试 |
+| 数据通道 | trajectory/output/ + agent_progress/ | trajectory/output/ + rounds/ |
+| 协调机制 | Agent 返回值 + 进度文件 | 文件系统状态文件 |
+| 复杂度 | 高（Agent + 轮询 + 进度格式） | 低（文件读写 + 状态检查） |
+
+### 18.4 轮次协调协议
+
+#### 18.4.1 状态文件
+
+路径: `trajectory/output/rounds/round_{n}/status.json`
+
+```json
+{
+  "round": 1,
+  "status": "training_complete",
+  "training": {
+    "run_id": "run_1777723566",
+    "session_id": "d77ca2b0-fec6-4ac0-aa91-ef36f58fe6e4",
+    "reward": 0.773,
+    "success": true,
+    "completed_at": "2026-05-02T20:16:49Z"
+  },
+  "optimization": null,
+  "created_at": "2026-05-02T20:04:39Z",
+  "updated_at": "2026-05-02T20:16:49Z"
+}
+```
+
+状态流转:
+
+```
+CLI-1 创建 → status: "training_complete"
+                    ↓
+CLI-2 读取，确认 training_complete
+CLI-2 执行优化
+CLI-2 更新 → status: "optimization_complete"
+                    ↓
+CLI-1 读取，确认 optimization_complete
+CLI-1 开始下一轮
+```
+
+异常状态:
+- `training_failed`: CLI-1 训练失败，CLI-2 不应开始优化
+- CLI-2 可以选择分析失败轨迹（部分数据仍有价值）
+
+#### 18.4.2 原子写入
+
+状态文件写入使用 write-to-temp-then-rename 模式：
+
+```python
+import os, json, tempfile
+
+def atomic_write_json(path, data):
+    dir_path = os.path.dirname(path)
+    fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.rename(tmp_path, path)
+    except:
+        os.unlink(tmp_path)
+        raise
+```
+
+这确保 CLI-2 永远不会读到半写的状态文件。
+
+#### 18.4.3 读写所有权
+
+| 字段 | CLI-1 (训练) | CLI-2 (优化) |
+|------|-------------|-------------|
+| round | 创建时写入 | 只读 |
+| status | 写入 training_complete/training_failed | 写入 optimization_complete |
+| training | 写入 | 只读 |
+| optimization | 只读 | 写入 |
+| created_at | 写入 | 只读 |
+| updated_at | 写入 | 写入 |
+
+每个 CLI 只写自己负责的字段，不修改对方的字段。
+
+#### 18.4.4 Python 协调模块
+
+`trajectory/round_state.py`:
+
+```python
+class RoundState:
+    """轮次状态协调。CLI-1 和 CLI-2 共用。"""
+
+    def __init__(self, base_dir: str = "trajectory/output/rounds"):
+        self.base_dir = Path(base_dir)
+
+    def write_training_complete(self, round_num, run_id, reward, session_id, success):
+        """CLI-1 调用: 训练完成后写入状态。"""
+
+    def write_training_failed(self, round_num, run_id, error, session_id):
+        """CLI-1 调用: 训练失败时写入状态。"""
+
+    def write_optimization_complete(self, round_num, report_path, patches_generated, patches_accepted):
+        """CLI-2 调用: 优化完成后更新状态。"""
+
+    def read_status(self, round_num) -> Optional[dict]:
+        """读取指定轮次的状态。返回 None 如果不存在。"""
+
+    def find_latest_round(self) -> Optional[int]:
+        """找到最新的轮次号。"""
+
+    def find_pending_optimization(self) -> Optional[int]:
+        """找到 status=training_complete 但未优化的轮次。"""
+
+    def find_pending_training(self) -> Optional[int]:
+        """找到上一轮 optimization_complete 后的下一轮号。"""
+```
+
+### 18.5 Skill 变更
+
+#### 18.5.1 新增: traj-train-optimize
+
+CLI-2 的编排 skill，替代 traj-loop。
+
+位置: `skill-bank/traj/traj-train-optimize/base.md`
+
+与 traj-loop 的关键区别:
+- 不调用 rllm-train（训练由 CLI-1 负责）
+- 不使用 Agent 子 agent（CLI-2 本身就是独立进程）
+- 不做进度轮询（CLI-2 终端直接可见）
+- 通过 round status 文件与 CLI-1 协调
+
+执行步骤:
+
+```
+1. 解析参数: round 号 (必需) 或 "latest"
+2. 读取 rounds/round_{n}/status.json
+   → training_complete: 继续
+   → optimization_complete: 报告已完成，退出
+   → 不存在/training_failed: 报错退出
+3. 提取 session_id 和 run_id
+4. 验证轨迹数据: ls trajectory/output/rllm/raw/{session_id}/
+5. Skill("traj-segment", args="--session {session_id}")
+6. Skill("traj-analyze-rllm")
+7. Skill("traj-optimize", args="{report_path}")
+8. 更新 status → optimization_complete
+9. 输出轮次摘要
+```
+
+#### 18.5.2 修改: rllm-train
+
+在 Phase 6 (最终报告) 后新增 Phase 6.5:
+
+```
+Phase 6.5: 轮次完成信号（双 CLI 模式）
+
+触发条件: args 中包含 round=N
+
+步骤:
+1. sleep 2s (等待 hooks 刷新)
+2. 调用 RoundState().write_training_complete(...)
+3. 输出确认信息
+```
+
+round 参数可选。独立使用 /rllm-train 时不传 round，跳过此步骤。rllm-train 的 Phase 0-6 完全不变。
+
+#### 18.5.3 修改: traj-segment
+
+更新写入调用:
+- 旧: `writer.write_trajectories(trajectories)` (追加模式)
+- 新: `writer.write_session_trajectories(session_id, trajectories)` (覆盖模式)
+
+#### 18.5.4 修改: traj-analyze-rllm
+
+更新隔离说明:
+- 旧: "本 skill 在独立 Agent 子 agent 中执行"
+- 新: "本 skill 在独立的 CLI 会话中执行（双 CLI 架构），或在 Agent 子 agent 中执行（单 CLI 兼容模式）"
+
+数据边界规则不变。
+
+#### 18.5.5 废弃: traj-loop
+
+标记为 deprecated。保留代码但不再推荐使用。
+
+### 18.6 执行模式
+
+#### 18.6.1 手动模式（Phase 1 目标）
+
+用户手动在两个终端之间切换:
+
+```
+Terminal 1:
+  $ claude
+  > /rllm-train "round=1 | 用 qwen-0.5b 训练数学 agent, reward >= 0.8"
+  ... (训练完成)
+  Round 1 训练完成，状态已写入 trajectory/output/rounds/round_1/status.json
+
+Terminal 2:
+  $ claude
+  > /traj-train-optimize round=1
+  ... (分割 → 分析 → 优化 → 用户确认 patch → 编译)
+  Round 1 优化完成，3 patches accepted
+
+Terminal 1:
+  > /rllm-train "round=2 | 用 qwen-0.5b 训练数学 agent, reward >= 0.8"
+  ... (使用优化后的 skill 训练)
+```
+
+#### 18.6.2 半自动模式（未来）
+
+CLI-2 使用 `/loop` 轮询:
+
+```
+Terminal 2:
+  > /loop 5m /traj-train-optimize latest
+```
+
+每 5 分钟检查是否有新的 training_complete 轮次，有则自动开始优化。
+
+#### 18.6.3 全自动模式（未来）
+
+两个 CLI 都使用 `/loop`:
+
+```
+Terminal 1:
+  > /loop /rllm-train "auto-round | 用 qwen-0.5b 训练数学 agent"
+
+Terminal 2:
+  > /loop 5m /traj-train-optimize latest
+```
+
+CLI-1 每轮训练完成后自动检查上一轮优化是否完成，然后开始下一轮。
+
+### 18.7 隔离性分析
+
+双 CLI 架构在所有隔离维度上都优于单 CLI + Agent 方案:
+
+| 维度 | 单 CLI + Agent | 双 CLI | 改进 |
+|------|---------------|--------|------|
+| 上下文隔离 | Agent 子 agent 逻辑隔离 | 独立进程物理隔离 | 更强 |
+| 数据流隔离 | 依赖 skill 指令约束 | 进程边界 + 文件系统 | 更强 |
+| 文件目录隔离 | 依赖 data-boundary 规则 | 不变 | 相同 |
+| 领域知识隔离 | 不变 | 不变 | 相同 |
+| Layer 数据隔离 | hooks layer 路由 | hooks layer 路由 + 进程隔离 | 更强 |
+
+CLI-2 物理上无法看到 CLI-1 的对话上下文，因为它们是完全独立的 Claude Code 进程。这比 Agent 子 agent 的隔离更彻底 — Agent 子 agent 虽然有独立上下文，但仍在同一个进程中运行。
+
+### 18.8 已知限制和风险
+
+| 风险 | 缓解措施 |
+|------|---------|
+| Hooks 刷新延迟: CLI-1 写 status 时最后几个 hook 事件可能未写入 | Phase 6.5 中 sleep 2s；CLI-2 可检查事件数是否合理 |
+| 并发写入 status.json | 读写所有权分离（18.4.3），每个 CLI 只写自己的字段 |
+| CLI-2 在 CLI-1 未完成时启动 | status.json 不存在或 status != training_complete 时拒绝执行 |
+| Skill 编译冲突: CLI-2 编译时 CLI-1 正在读取 SKILL.md | 手动模式下不会发生；自动模式需要文件锁或版本号 |
+| 用户忘记传 round 参数 | rllm-train 不传 round 时正常执行，只是不写 status 文件 |
+
+### 18.9 废弃清单
+
+| 模块 | 状态 | 替代 |
+|------|------|------|
+| traj-loop skill | deprecated | traj-train-optimize (CLI-2) + rllm-train round 参数 (CLI-1) |
+| trajectory/agent_progress.py | deprecated | trajectory/round_state.py |
+| trajectory/output/agent_progress/ | deprecated | trajectory/output/rounds/ |
+| trajectory/output/loop_state.json | deprecated | trajectory/output/rounds/round_{n}/status.json |
+| Section 17 File-based Progress Tracking | deprecated | Section 18 双 CLI 架构 |
+
+Phase 1 保留废弃代码作为回退。验证双 CLI 工作流后再清理。
+
+### 18.10 实施清单
+
+| 阶段 | 文件 | 操作 | 说明 |
+|------|------|------|------|
+| Phase 1 | `trajectory/round_state.py` | 新增 | RoundState 协调类 |
+| Phase 1 | `trajectory/config.py` | 修改 | 添加 rounds_dir |
+| Phase 1 | `trajectory/store/writer.py` | 修改 | 添加 write_session_trajectories() |
+| Phase 1 | `skill-bank/traj/traj-train-optimize/base.md` | 新增 | CLI-2 编排 skill |
+| Phase 1 | `skill-bank/traj/traj-train-optimize/manifest.yaml` | 新增 | manifest |
+| Phase 1 | `skill-bank/rllm/rllm-train/base.md` | 修改 | Phase 6.5 |
+| Phase 1 | `skill-bank/traj/traj-analyze-rllm/base.md` | 修改 | 隔离说明 |
+| Phase 1 | `skill-bank/traj/traj-segment/base.md` | 修改 | write_session_trajectories |
+| Phase 1 | `skill-bank/traj/traj-loop/base.md` | 修改 | deprecated |
+| Phase 1 | `skill-bank/bank.yaml` | 修改 | 添加 traj-train-optimize |
+| Phase 1 | 编译所有 skill | 执行 | `python skill-bank/compile.py --all` |
+| Phase 2 | traj-train-optimize | 修改 | 添加 "latest" 模式轮询 |
+| Phase 3 | 两个 CLI | 配置 | `/loop` 自动化 |
