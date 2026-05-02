@@ -1,10 +1,12 @@
-# rllm-trl
+# agent-evolution
 
-将 [rLLM](https://github.com/agentification/rllm) 的 agent/environment 抽象与 HuggingFace [TRL](https://github.com/huggingface/trl) 的 GRPOTrainer 结合，在 Mac 上用强化学习训练语言 agent。
+三层自演进 Agent 架构：Agent 自己训练自己，优化训练过程，并递归改进优化器本身。
 
-## 核心理念：模型自己训练自己
+本项目将 [rLLM](https://github.com/agentification/rllm) 的 agent/environment 抽象与 HuggingFace [TRL](https://github.com/huggingface/trl) 的 GRPOTrainer 结合，在 Mac 上用强化学习训练语言 agent，并通过轨迹捕获和 LLM 分析实现训练系统的持续自我优化。
 
-本项目实现了**双层 Agent 自演进架构**，让语言 agent 和训练它的 skill 系统互相驱动、持续进化：
+## 核心理念：Agent 自己训练自己
+
+本项目实现了**三层 Agent 自演进架构**，让语言 agent 和训练它的 skill 系统互相驱动、持续进化：
 
 ```mermaid
 flowchart TB
@@ -56,11 +58,11 @@ flowchart TB
 ```bash
 pip install torch transformers trl datasets
 
-# 默认配置（claude2.5-0.5B，64 道题，2 个 epoch）
+# 默认配置（Qwen2.5-0.5B，64 道题，2 个 epoch）
 python -m rllm_trl.train
 
 # 自然语言配置（支持中英文）
-python -m rllm_trl.train "用 claude-0.5b 训练数学 agent，64 个问题，2 个 epoch"
+python -m rllm_trl.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
 python -m rllm_trl.train "quick test with 16 problems"
 
 # 从配置文件启动（由 rllm-config skill 生成）
@@ -110,9 +112,9 @@ flowchart LR
 
 | 模式 | 适用场景 | 命令示例 |
 |------|---------|---------|
-| 手动 | 单次训练，按步确认 | `/rllm-train approve 模式，claude-0.5b，64 题` |
+| 手动 | 单次训练，按步确认 | `/rllm-train approve 模式，qwen-0.5b，64 题` |
 | 自动 | 快速测试，持续调参重训 | `/rllm-train auto 模式，16 题，reward >= 0.5` |
-| 优化 | 多轮自动优化 skill | `/traj-loop 用 claude-0.5b 自动优化 3 轮` |
+| 优化 | 多轮自动优化 skill | `/traj-loop 用 qwen-0.5b 自动优化 3 轮` |
 
 ### 第二层：优化 Agent — traj-loop
 
