@@ -535,10 +535,13 @@ trajectory/
 │   ├── trajectories/           # 分割后的轨迹
 │   │   └── {session_id}/
 │   │       └── trajectories.jsonl
+│   ├── agent_progress/         # Agent 进度跟踪文件（17 章）
+│   │   └── {session_id}.json
 │   ├── reports/                # 分析报告
 │   │   └── {timestamp}-report.md
 │   └── index.jsonl             # 全局索引
 │
+├── agent_progress.py           # Agent 进度跟踪器（17 章）
 └── config.py                   # 模块配置
 ```
 
@@ -953,3 +956,118 @@ Hook 失败静默。事件写入追加模式。分割和分析可重复执行（
 3. 在 `manifest.yaml` 中注册，在 `bank.yaml` 中添加到 traj group
 4. 编译: `python skill-bank/compile.py traj-analyze-{domain}`
 5. 在 traj-loop 中注册: 修改 traj-loop 使其可选择不同分析器
+
+## 17. Agent 可观测性设计
+
+### 17.1 问题背景
+
+traj-loop 使用 Agent 工具启动子 agent（rllm-train、traj-analyze-rllm）实现上下文隔离。但 Agent 子 agent 在独立上下文中执行，对父对话完全黑盒：
+
+- **无法实时监控进度** — 父对话只能看到最终结果，看不到中间步骤
+- **无法中途干预** — 无法在子 agent 卡住时介入
+- **无法判断执行状态** — 容易误判子 agent 的状态（以为还在运行，实际已结束）
+- **SendMessage 不可用** — SendMessage 工具仅在 agent teams 模式下可用（experimental，配置复杂）
+
+Claude Code 的 Agent 工具设计为"启动 → 执行 → 返回结果"，中间没有推送通道。没有真正的"实时进度推送"机制。
+
+### 17.2 解决方案: File-based Progress Tracking
+
+通过共享进度文件实现可观测性：
+
+```
+子 agent (rllm-train)                      父对话 (traj-loop)
+         │                                          │
+         │  Phase 开始: 写入 progress.json            │
+         │  ──────────────────────────────────►    │
+         │  Phase 完成: 更新 phase                   │
+         │  ──────────────────────────────────►    │  读取 progress.json
+         │  训练中: 定期更新 step/reward             │  显示进度
+         │  ──────────────────────────────────►    │
+         │  训练完成: 写入 result                    │
+         │  ──────────────────────────────────►    │  读取: 训练完成
+         │                                          │
+         └────────────────  返回摘要 ───────────────►
+```
+
+**关键点**: 子 agent 将进度写入共享文件，父对话定期轮询并显示。
+
+### 17.3 进度文件格式
+
+位置: `trajectory/output/agent_progress/{session_id}.json`
+
+```json
+{
+  "agent_id": "a9e38b8da762f4e22",
+  "description": "rllm-train round 1",
+  "session_id": "round_1_1746150000",
+  "status": "running",
+  "started_at": "2026-05-02T06:32:57Z",
+  "updated_at": "2026-05-02T06:35:12Z",
+  "phase": "phase_2_run",
+  "progress": {
+    "phase_0_clarify": {"status": "completed", "duration_s": 12},
+    "phase_1_config": {"status": "completed", "duration_s": 8},
+    "phase_2_run": {"status": "running", "step": 15, "total_steps": 64, "reward": 0.625},
+    "phase_3_monitor": {"status": "pending"},
+    "phase_4_analyze": {"status": "pending"}
+  },
+  "latest_update": "Step 15/64: reward=0.625, speed=78 tok/s, ETA 12m",
+  "result": null,
+  "error": null
+}
+```
+
+**状态终态**:
+- `status: "completed"` + `result: {...}` — 成功，result 包含 run_id, reward, success
+- `status: "failed"` + `error: "..."` — 失败，error 包含错误信息
+
+### 17.4 进度文件目录
+
+通过 `trajectory/config.py` 的 `TrajectoryConfig.agent_progress_dir` 配置：
+- 默认路径: `trajectory/output/agent_progress/`
+- 父对话和子 agent 读写同一目录
+
+### 17.5 traj-loop 父对话端的轮询逻辑
+
+1. 启动子 agent 后，立即初始化进度文件（写入 status=init）
+2. 子 agent 返回后，开始轮询（每 30 秒）
+3. 每次轮询读取进度文件，显示:
+   ```
+   [Round {n}] 训练进度:
+     Phase: {phase}
+     Step: {step}/{total_steps}
+     Reward: {reward}
+     最新: {latest_update}
+   ```
+4. 直到 status 变为 completed/failed
+
+### 17.6 子 agent 端的进度写入
+
+在 rllm-train 的每个 phase 完成后（Bash/python3）更新进度文件：
+- Phase 开始时设置 phase 状态
+- Phase 完成后记录 duration_s
+- 训练中每 N 步更新一次 step/reward
+- 全部完成时写入最终 result
+
+traj-analyze-rllm 子 agent 同样需要进度跟踪（phase_1_load → phase_2_extract → phase_3_analyze → phase_4_report）。
+
+### 17.7 实施清单
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `trajectory/agent_progress.py` | 新增 | AgentProgressTracker 类 |
+| `trajectory/config.py` | 修改 | 添加 agent_progress_dir 配置 |
+| `skill-bank/traj/traj-loop/base.md` | 修改 | 添加轮询循环和进度显示 |
+| `skill-bank/rllm/rllm-train/base.md` | 修改 | Phase 完成后写入进度 |
+| `skill-bank/traj/traj-analyze-rllm/base.md` | 修改 | 添加进度写入 |
+
+### 17.8 与 Agent 隔离的关系
+
+| 维度 | Agent 隔离 | Agent 可观测性 |
+|------|-----------|---------------|
+| 目标 | 分析器看不到训练上下文 | 编排层能看到子 agent 进度 |
+| 机制 | Agent 子 agent 独立上下文 | 共享进度文件 |
+| 数据通道 | trajectory/output/ | trajectory/output/agent_progress/ |
+| 关系 | 正交，叠加 | 同上 |
+
+进度监控不破坏上下文隔离：父对话读取的是**进度数据**（phase/step/reward），不是**训练细节**（config.json 内容、trajectory 具体内容）。

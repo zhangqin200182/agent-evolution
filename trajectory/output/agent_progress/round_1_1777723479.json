@@ -1,0 +1,29 @@
+{
+  "agent_id": null,
+  "description": "rllm-train round 1",
+  "session_id": "round_1_1777723479",
+  "status": "completed",
+  "started_at": "2026-05-02T20:04:39.390245",
+  "updated_at": "2026-05-02T20:16:49.463072",
+  "phase": "phase_6_report",
+  "progress": {
+    "run_id": "run_1777723566",
+    "config_path": "rllm_trl/output/runs/run_1777723566/config.json",
+    "task_id": "bfywkd5se",
+    "log_path": "rllm_trl/output/runs/run_1777723566/training_log.txt",
+    "step": "32/32",
+    "reward": 0.766,
+    "speed": "97 tok/s",
+    "reward_history": "1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0",
+    "wall_time": "6m46s",
+    "final_reward": 0.773,
+    "target_reached": true
+  },
+  "latest_update": "Phase 6: \u8bad\u7ec3\u5b8c\u6210. run_id=run_1777723566, avg_reward=0.773, \u76ee\u6807\u8fbe\u6210.",
+  "result": {
+    "run_id": "run_1777723566",
+    "reward": 0.773,
+    "success": true
+  },
+  "error": null
+}

@@ -36,5 +36,9 @@ class TrajectoryConfig:
     def index_path(self) -> Path:
         return Path(self.output_dir) / "index.jsonl"
 
+    @property
+    def agent_progress_dir(self) -> Path:
+        return Path(self.output_dir) / "agent_progress"
+
 
 DEFAULT_CONFIG = TrajectoryConfig()

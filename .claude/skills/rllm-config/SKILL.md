@@ -104,6 +104,23 @@ difficulty 参数控制训练数据的难度分布:
    - 0.5B + batch=2 + gen=4 + len=512 ≈ 可能 OOM
    超出估算时: 自动降低 max_completion_length 或 num_problems
 
+### 渐进式难度升级
+
+调参时的难度调整增加渐进规则:
+
+当前轮次 avg_reward >= 0.7 且 loss=0 时:
+- 当前 difficulty=simple → 升级到 mixed
+- 当前 difficulty=mixed (20% hard) → 升级到 mixed-hard (50% hard)
+- 当前 difficulty=mixed-hard → 升级到 hard
+- 同时增加 max_agent_steps: 3 → 5（给模型更多推理空间）
+
+禁止直接从 mixed 跳到 hard:
+- 轨迹证据: R3 mixed avg=0.77 → R4 hard avg=0.19（断崖下降）
+- 需要中间级别 mixed-hard 作为过渡
+
+difficulty 参数扩展:
+- `"mixed-hard"`: 50% simple + 50% hard（新增，介于 mixed 和 hard 之间）
+
 ### 参数安全范围
 
 #### 模型级别安全配置（硬约束）
@@ -158,6 +175,53 @@ difficulty 参数控制训练数据的难度分布:
 
 替代方案: 保持 64 problems 但切换 difficulty=simple
 - 适用于需要更多训练数据但不需要 hard 题目的场景
+
+### Seed 随机化策略
+
+多轮训练时（traj-loop 或手动多轮）:
+- 每轮使用不同 seed: `seed = base_seed + round_number`
+- 或启用 dataset shuffle: `shuffle=True`
+- 目的: 避免相同问题固定在相同 step，导致零 reward 步骤的周期性模式
+
+轨迹证据:
+- R3 和 R5 使用相同 seed=42，零 reward 步骤完全一致 [5,6,12,25,31]
+- 训练未改善模型在这些特定问题上的表现
+- 变更 seed 可以让模型接触不同的问题排列，获得更多样的学习信号
+
+### num_problems 精细化范围 (0.5B 模型)
+
+基于 5 轮训练数据更新推荐范围:
+
+| difficulty | 推荐范围 | 依据 |
+|-----------|---------|------|
+| mixed (20% hard) | 40-48 | 32 太简单 (loss=0), 64 forgetting |
+| mixed-hard (50% hard) | 24-32 | hard 比例增加后需减少总量 |
+| hard | 16-24 | 64 完全超出能力 (avg=0.19) |
+
+默认推荐配置 (0.5B + 正式训练):
+- num_problems=48, difficulty=mixed, lr=5e-6, epochs=1
+- 预期: 比 32 problems 更有挑战性，但不会 forgetting
+
+轨迹证据:
+- R1/R2 (64p, mixed): catastrophic forgetting at step 14-16
+- R3/R5 (32p, mixed): loss=0, 无学习效果
+- 推断: 最优点在 32-64 之间，推荐 40-48
+
+### num_problems 最优范围精细化 (0.5B + mixed, 基于 2 轮数据)
+
+2 轮训练数据收敛出更精确的推荐范围:
+
+| num_problems | 结果 | 证据 |
+|-------------|------|------|
+| 32 | 无 forgetting 但 loss=0 (无学习) | run_1777723566: avg=0.773, loss=0 全程 |
+| 48 | avg=0.849 但 step 41-47 格式退化 | run_1777726900: 后 20% avg=0.475 |
+| 40 (推断) | 平衡点 | 32 太简单, 48 后期崩溃 |
+
+更新推荐:
+- 首轮训练: num_problems=40 (安全起点)
+- avg_reward >= 0.85 且无后期 forgetting: 可尝试 44
+- 出现后期 forgetting: 减少到 36
+- 禁止 0.5B+mixed 使用 num_problems > 48
 
 ## 配置预检（生成配置后、启动前执行）
 

@@ -25,6 +25,7 @@ metadata:
 6. **数据流隔离** — traj-xx 步骤只从 trajectory/output/ 读数据，不直接访问 rllm_trl/output/
 7. **traj-segment 不可跳过** — 即使轨迹数据为空也必须调用（记录空结果供追溯）
 8. **禁止直接分析训练日志** — 不在编排层 Read/tail rllm_trl/ 文件做分析
+9. **进度可观测** — 通过进度文件（trajectory/output/agent_progress/）实现子 agent 对父对话的进度可见性
 <!-- /section:rules -->
 
 <!-- section:steps -->
@@ -50,20 +51,63 @@ for round in 1..N:
 
     Step 1: 训练 (在独立子 agent 中)
     ─────────────────────────────────
-    使用 Agent 工具启动子 agent:
-    
-    Agent(
-        prompt="读取 .claude/skills/rllm-train/SKILL.md 并按其步骤执行训练。
-                训练描述: {description}
-                工作目录: /Users/kevin/code/MyProject
-                Round {round}/{total_rounds}。
-                训练完成后输出: run_id, 最终 reward, 是否成功。",
-        description="rllm-train round {round}"
-    )
-    
-    → 子 agent 执行完整的 rllm-train 流程 (clarify→config→run→monitor→analyze)
-    → Hooks 自动捕获子 agent 中所有工具调用到 trajectory/output/raw/
-    → 子 agent 返回摘要 (run_id, reward)，其完整上下文被丢弃
+    1.1 生成 session_id:
+        session_id = f"round_{round}_{timestamp}"
+        创建进度文件 trajectory/output/agent_progress/{session_id}.json
+        写入 status=init
+
+    1.2 启动子 agent，prompt 中包含进度文件跟踪要求:
+        Agent(
+            prompt="读取 .claude/skills/rllm-train/SKILL.md 并按其步骤执行训练。
+                    训练描述: {description}
+                    工作目录: /Users/kevin/code/MyProject
+                    Round {round}/{total_rounds}。
+
+                    **进度跟踪**: 在执行过程中，定期更新进度文件:
+                    trajectory/output/agent_progress/{session_id}.json
+
+                    每个 phase 开始/完成时更新进度。
+                    训练中定期更新 step/reward。
+                    训练完成后输出: run_id, 最终 reward, 是否成功。
+
+                    **进度文件格式**:
+                    {
+                      "status": "running"|"completed"|"failed",
+                      "phase": "phase_0_clarify"|"phase_1_config"|"phase_2_run"|"phase_3_monitor"|"phase_4_analyze",
+                      "progress": {"phase_name": {"status": "completed"|"running"|"pending", "step": N, "total_steps": N, "reward": 0.5}},
+                      "result": null|{"run_id": "...", "reward": 0.5, "success": true},
+                      "error": null|string
+                    }",
+            description="rllm-train round {round}"
+        )
+
+        → 子 agent 立即返回（但实际已在后台执行）
+        → 子 agent 的 Phase 1-4 完成时会更新进度文件
+
+    1.3 轮询进度文件（每 30 秒）:
+        while True:
+            读取 trajectory/output/agent_progress/{session_id}.json
+            显示进度:
+
+            [Round {round}] 训练进度:
+              Phase: {phase}
+              Step: {step}/{total_steps}
+              Reward: {reward}
+              最新: {latest_update}
+
+            if status == "completed":
+                提取 result 中的 run_id 和 reward
+                跳出轮询
+            elif status == "failed":
+                报告错误: {error}
+                询问是否重试或中止
+                跳出轮询
+            elif 超时 (30 分钟):
+                报告超时，询问是否继续等待
+            else:
+                等待 30 秒后继续轮询
+
+    1.4 清理进度文件（保留用于审计，可不清理）
 
     Step 1.5: 验证轨迹数据完整性
     ─────────────────────────────
@@ -78,19 +122,49 @@ for round in 1..N:
 
     Step 3: 分析 (在独立子 agent 中)
     ─────────────────────────────────
-    使用 Agent 工具启动子 agent:
-    
-    Agent(
-        prompt="读取 .claude/skills/traj-analyze-rllm/SKILL.md 并按其步骤执行分析。
-                工作目录: /Users/kevin/code/MyProject
-                只从 trajectory/output/ 读取数据，不要读取 rllm_trl/ 下的文件。
-                分析完成后输出: 报告路径, 优化建议数量。",
-        description="traj-analyze-rllm round {round}"
-    )
-    
-    → 子 agent 在全新上下文中执行，物理上看不到 Step 1 的训练细节
-    → 只能从 trajectory/output/ 获取数据
-    → 返回报告路径
+    3.1 生成 session_id:
+        analyze_session_id = f"analyze_{round}_{timestamp}"
+
+    3.2 启动分析子 agent，prompt 中包含进度文件跟踪要求:
+        Agent(
+            prompt="读取 .claude/skills/traj-analyze-rllm/SKILL.md 并按其步骤执行分析。
+                    工作目录: /Users/kevin/code/MyProject
+                    只从 trajectory/output/ 读取数据，不要读取 rllm_trl/ 下的文件。
+
+                    **进度跟踪**: 定期更新进度文件:
+                    trajectory/output/agent_progress/{session_id}.json
+
+                    **进度文件格式**:
+                    {
+                      "status": "running"|"completed"|"failed",
+                      "phase": "phase_1_load"|"phase_2_extract"|"phase_3_analyze"|"phase_4_report",
+                      "progress": {...},
+                      "result": null|{"report_path": "...", "suggestion_count": 3},
+                      "error": null|string
+                    }
+
+                    分析完成后输出: 报告路径, 优化建议数量。",
+            description="traj-analyze-rllm round {round}"
+        )
+
+        → 子 agent 在全新上下文中执行，物理上看不到 Step 1 的训练细节
+        → 只能从 trajectory/output/ 获取数据
+        → 返回报告路径
+
+    3.3 轮询分析进度（每 30 秒）:
+        while True:
+            读取 trajectory/output/agent_progress/{analyze_session_id}.json
+            显示进度
+
+            [Round {round}] 分析进度:
+              Phase: {phase}
+              最新: {latest_update}
+
+            if status == "completed":
+                提取 result 中的 report_path 和 suggestion_count
+                跳出轮询
+            elif status == "failed":
+                报告错误，跳出轮询
 
     Step 4: 生成 patch
     ──────────────────
@@ -199,4 +273,21 @@ Claude Code Hooks 对子 agent 中的工具调用同样生效:
 - 捕获的事件写入 trajectory/output/raw/，conversation_id 标记为子对话
 
 这是隔离方案的关键前提: 子 agent 1 中 rllm-xx 读取的训练数据被 hooks 捕获到 trajectory/output/，子 agent 2 才有数据可分析。
+
+### Agent 进度可观测性
+
+子 agent 在独立上下文中执行，对父对话完全黑盒。为实现可观测性，使用共享进度文件:
+
+```
+trajectory/output/agent_progress/{session_id}.json
+```
+
+**子 agent 端**: 在每个 phase 完成时用 Bash/python3 更新进度文件
+**父对话端**: 每 30 秒轮询进度文件并显示进度
+
+进度文件不破坏上下文隔离:
+- 父对话读取的是**进度数据**（phase/step/reward），不是**训练细节**（config.json 内容）
+- 进度文件路径已在 prompt 中传递给子 agent，不涉及额外的数据泄露
+
+详见 `docs/trajectory-design.md` Section 17。
 <!-- /section:agent-isolation -->
