@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an Agent RL training + automatic skill optimization system. The repo has four main parts:
 
-- `rllm_train/` — Training backend (rllm_train, to be renamed). Self-contained agent RL training pipeline combining rLLM's agent/environment abstractions with TRL's GRPOTrainer. Runs on Mac (MPS) and CPU.
-- `traj_opt/` — Optimization backend (traj_opt, to be renamed). Captures Claude Code interaction trajectories via hooks, stores/segments/analyzes them, and generates skill-bank patches for automatic skill optimization.
+- `rllm_train/` — Training backend. Self-contained agent RL training pipeline combining rLLM's agent/environment abstractions with TRL's GRPOTrainer. Runs on Mac (MPS) and CPU.
+- `traj_opt/` — Optimization backend. Captures Claude Code interaction trajectories via hooks, stores/segments/analyzes them, and generates skill-bank patches for automatic skill optimization.
 - `skill-bank/` — Skill management system (base + patch + compile). Contains `compile.py`, `bank.yaml`, and per-skill directories with `base.md`, `patches/`, `manifest.yaml`. Compiles to `.claude/skills/*/SKILL.md`.
 - `skill-bank/rllm/` + `skill-bank/traj/` — Two groups of Claude Code skills. rllm-xx skills orchestrate training; traj-xx skills orchestrate trajectory analysis and optimization. These are the system's entry points.
 - `docs/` — Design documents: system overview, training backend, optimization backend, skill-bank architecture, skills design.

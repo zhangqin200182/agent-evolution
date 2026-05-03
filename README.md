@@ -20,7 +20,7 @@ flowchart TB
 
     T2 -->|"轨迹数据捕获<br/>traj_opt/output/rllm/"| L2
 
-    subgraph L2["第2层: 优化 Agent (traj-loop)"]
+    subgraph L2["第2层: 优化 Agent (双 CLI 架构)"]
         direction TB
         O1[分析轨迹 → 优化 rllm-train skill]
         O2[产出: 更强的训练能力]
@@ -48,9 +48,9 @@ flowchart TB
 
 **核心创新**:
 - **训练闭环**: rllm-train skill 自动驱动 RL 训练流程，自动捕获训练轨迹到 `traj_opt/output/rllm/`
-- **优化闭环**: traj-loop skill 基于 Layer 1 轨迹数据自动分析、自动生成 skill 优化补丁，形成自进化循环
-- **Meta 优化闭环** (可选): meta-loop 分析 Layer 2 轨迹，优化 traj-loop 本身，实现三层递归自演进
-- **Layer 隔离**: 按 layer 隔离存储轨迹（rllm/traj/meta），防止分析器读到错误的输入数据
+- **优化闭环**: 双 CLI 架构（CLI-1 训练 + CLI-2 优化），基于轨迹数据自动分析、自动生成 skill 优化补丁
+- **物理隔离**: 训练和优化在独立进程中执行，通过文件系统协调，确保分析基于客观轨迹而非内部状态
+- **Layer 隔离**: 按 layer 隔离存储轨迹（rllm/traj/），防止分析器读到错误的输入数据
 - **双重自动**: 训练自动执行，优化自动进行，模型和训练系统同步持续演进
 
 ## 快速开始
@@ -116,70 +116,86 @@ flowchart LR
 | 自动 | 快速测试，持续调参重训 | `/rllm-train auto 模式，16 题，reward >= 0.5` |
 | 优化 | 多轮自动优化 skill | `/traj-loop 用 qwen-0.5b 自动优化 3 轮` |
 
-### 第二层：优化 Agent — traj-loop
+### 第二层：优化 Agent — 双 CLI 架构
 
-基于轨迹捕获和 LLM 分析的自动化 skill 优化系统。它不直接训练模型，而是通过分析 rllm-train 执行轨迹来优化 rllm-train 本身：
+基于轨迹捕获和 LLM 分析的自动化 skill 优化系统。它不直接训练模型，而是通过分析 rllm-train 执行轨迹来优化 rllm-train 本身。
+
+训练和优化在两个独立的 Claude Code 进程中执行，通过文件系统协调：
 
 ```mermaid
 flowchart LR
-    RL[rllm-train 执行] -->|Hooks| RAW[traj_opt/output/rllm/raw/]
-    RAW -->|traj-segment| TR[traj_opt/output/rllm/trajectories/]
-    TR -->|traj-analyze-rllm| REP[traj_opt/output/rllm/reports/]
-    REP -->|traj-optimize| SB[skill-bank/rllm/]
-    SB -->|compile| SK[更强的 rllm-train skill]
+    subgraph CLI1["CLI-1: 训练 Agent"]
+        RT["/rllm-train round=N"]
+    end
+
+    subgraph CLI2["CLI-2: 优化 Agent"]
+        LT["/traj-launch-training"] -->|启动 CLI-1| RT
+        RT -->|Hooks 写入| RAW[traj_opt/output/rllm/raw/]
+        RAW -->|"/traj-train-optimize"| SEG[traj-segment]
+        SEG --> ANA[traj-analyze-rllm]
+        ANA --> OPT[traj-optimize]
+        OPT --> SB[skill-bank/rllm/ 编译更新]
+    end
+
+    style CLI1 fill:#e1f5fe,stroke:#0288d1
+    style CLI2 fill:#f3e5f5,stroke:#7b1fa2
 ```
-
-**为什么需要层级隔离？**
-
-优化 agent（traj-loop）和训练 agent（rllm-train）必须保持观察者/被观察者的严格隔离：
-- **上下文隔离**: traj-loop 通过 Claude Code Agent 工具在独立子 agent 中执行，拥有全新对话上下文，物理上无法看到训练过程细节
-- **数据流隔离**: 训练数据只能通过 `traj_opt/output/rllm/` 文件系统传递，不经过对话上下文
-- **Layer 隔离**: rllm-train 轨迹存储在 `rllm/`，traj-loop 轨迹存储在 `traj/`，防止分析器读到错误的输入数据
-- 这确保了优化建议基于客观轨迹数据，而非训练过程的内部状态
 
 **Skill 一览**:
 
 | Skill | 职责 |
 |---|---|
-| `traj-loop` | 顶层编排：自动执行 N 轮「训练→分割→分析→优化」循环 |
+| `traj-launch-training` | 在 CLI-2 中启动新 CLI-1 进程执行训练 |
+| `traj-train-optimize` | CLI-2 编排：分割 → 分析 → 优化完整流程 |
 | `traj-segment` | 将原始事件流分割为结构化轨迹 |
 | `traj-analyze-rllm` | LLM 分析 Layer 1 (rllm) 训练轨迹，识别问题模式，生成优化建议 |
 | `traj-optimize` | 将分析报告转化为 skill-bank patch，人工确认后编译 |
+| `traj-setup` | 一次性环境配置（hooks 安装） |
+| `traj-status` | 查看轮次状态和轨迹数据概览 |
 
-### 第三层：Meta 优化 Agent — meta-loop (可选)
+**使用流程**:
 
-meta-loop 分析 traj-loop 的执行轨迹，优化 traj-loop 本身，实现递归自演进：
+```bash
+# CLI-2 中操作
+/traj-launch-training round=1 | 用 qwen-0.5b 训练, reward >= 0.8
+# → 新终端窗口打开 CLI-1，用户在其中交互式训练
+# → 训练完成后回到 CLI-2
+/traj-train-optimize round=1
+# → 分割 → 分析 → 生成 patch → 确认 → 编译
+/traj-launch-training round=2 | 用 qwen-0.5b 训练, reward >= 0.8
+# → 使用优化后的 skill 训练
+```
 
-**Skill 一览**:
+### 第三层：Meta 优化 Agent（可选，实验性）
 
-| Skill | 职责 |
-|---|---|
-| `meta-loop` | 顶层编排：自动执行 N 轮「traj-loop→分割→分析→优化」循环 |
-| `traj-analyze-traj` | LLM 分析 Layer 2 (traj) 优化轨迹，识别编排问题，生成优化建议 |
+meta-loop 分析 traj-loop 的执行轨迹，优化 traj-loop 本身，实现递归自演进。
 
 **优化模式**:
 
 | 模式 | 说明 | 命令示例 |
 |------|------|---------|
-| 半自动 | /traj-loop 执行训练和分析，展示 patch 等待确认 | `/traj-loop claude-0.5b，3 轮，approve` |
-| 全自动 | /traj-loop 连续执行训练、分析、优化，用户只接收最终报告 | `/traj-loop claude-0.5b，3 轮，auto` |
+| 手动 | 逐步执行，每步确认 | `/rllm-train` + `/traj-train-optimize` |
+| 半自动 | CLI-2 一键启动训练和优化 | `/traj-launch-training` + `/traj-train-optimize` |
+| 全自动 | 多轮连续执行（实验性） | `/traj-loop qwen-0.5b，3 轮，auto` |
 
 ### 自演进流程示例
 
 ```
-Round 1: 用户发起 /traj-loop
-  rllm-train 执行 → 轨迹捕获 → 分析发现问题: lr 过高导致崩溃
-  → 生成 patch: rllm-config lr 1e-5 → 5e-6
+Round 1:
+  CLI-2: /traj-launch-training round=1 | 用 qwen-0.5b 训练, reward >= 0.8
+  CLI-1: rllm-train 执行 → reward=0.86 → 轨迹捕获
+  CLI-2: /traj-train-optimize round=1
+    → 分析发现: loss=0 说明题目太简单，session_id 获取失败
+    → 生成 3 个 patch: 难度自动升级、session_id 修复、监控频率
 
-Round 2: 使用优化后的 rllm-train
-  训练稳定 → 发现新问题: num_problems 不足导致过拟合
-  → 生成 patch: rllm-config problems 64 → 128
+Round 2: 使用优化后的 skill
+  CLI-2: /traj-launch-training round=2 | ...
+  CLI-1: rllm-train 执行 → reward=0.825 → session_id 正确获取
+  CLI-2: /traj-train-optimize round=2
+    → 验证: session_id 修复已生效
+    → 后半段 reward 轻微波动，单轮不调参
 
-Round 3: 继续优化
-  reward 持续上升 → 格式退化问题
-  → 生成 patch: rllm-analyze 调整 loss_type
-
-最终: 3 轮优化后，reward 从 0.25 → 0.65，skill 持续自我改进
+结果: 2 轮优化后，3 个 patch 被接受，skill 持续自我改进
 ```
 
 ## 训练管线工作原理
@@ -197,6 +213,8 @@ train.py → GRPOTrainer → rollout_func → HFAgentExecutionEngine → agent/e
 
 ## 模块结构
 
+### rllm_train（训练后端）
+
 | 模块 | 职责 |
 |---|---|
 | `train.py` | 入口，构建数据集、模型、tokenizer，接入 GRPOTrainer |
@@ -210,6 +228,19 @@ train.py → GRPOTrainer → rollout_func → HFAgentExecutionEngine → agent/e
 | `logger.py` | 训练实时进度表和总结报告 |
 | `perf_stats.py` | 耗时分解：推理、环境、logprob、GRPO |
 | `trajectory_writer.py` | 逐步 JSONL 输出 |
+
+### traj_opt（优化后端）
+
+| 模块 | 职责 |
+|---|---|
+| `hooks/` | Claude Code hooks 入口（PostToolUse、Stop、SubagentStop） |
+| `adapter/` | Hooks JSON → 内部格式转换（唯一的 schema 耦合点） |
+| `store/` | 事件写入、轨迹查询、索引管理 |
+| `segmenter/` | 轨迹分割（Skill Segmenter + Free Segmenter） |
+| `analyzer/` | 分析基础设施（轨迹读取、训练数据提取、报告生成） |
+| `optimizer/` | PatchGenerator（生成 + 校验 + 激活）、CompilerBridge |
+| `round_state.py` | 轮次协调（status.json 读写） |
+| `config.py` | TrajectoryConfig |
 
 ## 关键设计
 
@@ -244,9 +275,12 @@ python skill-bank/compile.py --diff rllm-config
 
 ## 设计文档
 
-- `docs/trajectory-design.md` — 轨迹捕获、分割、分析系统的完整规范
+- `docs/system-overview.md` — 系统总览：四层架构、双 CLI 架构、隔离设计、轮次协调协议
+- `docs/rllm-train-design.md` — rllm_train 训练后端技术规范
+- `docs/traj-opt-design.md` — traj_opt 优化后端技术规范
+- `docs/skills-design.md` — 两组 skill 的职责划分、编排逻辑、使用场景
 - `docs/skill-bank-design.md` — Skill Bank 架构规范（base + patch + compile）
-- `docs/traj-rllm-isolation-design.md` — 观察者/被观察者隔离设计
+- `docs/rllm-skill-changelog.md` — rllm skill 系统演进记录
 
 ## License
 
