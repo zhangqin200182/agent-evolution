@@ -57,17 +57,43 @@ flowchart TB
 
 ```bash
 pip install torch transformers trl datasets
-
-# 默认配置（Qwen2.5-0.5B，64 道题，2 个 epoch）
-python -m rllm_train.train
-
-# 自然语言配置（支持中英文）
-python -m rllm_train.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
-python -m rllm_train.train "quick test with 16 problems"
-
-# 从配置文件启动（由 rllm-config skill 生成）
-python -m rllm_train.run_training rllm_train/output/runs/<run_id>/config.json
 ```
+
+### 方式一：直接运行训练
+
+```bash
+python -m rllm_train.train "用 qwen-0.5b 训练数学 agent，64 个问题"
+```
+
+### 方式二：双 CLI 自动优化（推荐）
+
+打开两个终端，分别运行 Claude Code：
+
+```bash
+# Terminal 1 & 2 都进入项目目录
+cd /path/to/project
+
+# Terminal 2 (优化 Agent)
+claude
+
+# 首次使用，初始化轨迹捕获
+> /traj-setup
+
+# 启动 Round 1 训练（自动打开 Terminal 1）
+> /traj-launch-training round=1 | 用 qwen-0.5b 训练, reward >= 0.8
+
+# Terminal 1 中 rllm-train 自动执行训练...
+# 训练完成后回到 Terminal 2
+
+# 分析轨迹，生成优化 patch
+> /traj-train-optimize round=1
+
+# 使用优化后的 skill 启动 Round 2
+> /traj-launch-training round=2 | 用 qwen-0.5b 训练, reward >= 0.8
+> /traj-train-optimize round=2
+```
+
+每轮优化后，rllm-xx skill 自动改进（参数安全范围、异常检测、监控策略等），下一轮训练使用更强的 skill。
 
 ## 双层 Agent 自演进系统
 
