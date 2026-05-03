@@ -24,9 +24,9 @@ metadata:
 ### 2. 读取索引
 
 ```python
-from trajectory.store.index import IndexManager
-from trajectory.store.reader import EventReader, TrajectoryReader
-from trajectory.config import DEFAULT_CONFIG
+from traj_opt.store.index import IndexManager
+from traj_opt.store.reader import EventReader, TrajectoryReader
+from traj_opt.config import DEFAULT_CONFIG
 
 index = IndexManager(DEFAULT_CONFIG)
 sessions = index.list_sessions()

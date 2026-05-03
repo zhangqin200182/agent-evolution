@@ -35,7 +35,7 @@ skill-bank/
 示例：
 ```
 skill-bank/
-├── rllm/                            # rllm_trl 训练相关
+├── rllm/                            # rllm_train 训练相关
 │   ├── rllm-config/
 │   ├── rllm-analyze/
 │   ├── rllm-monitor/
@@ -55,7 +55,7 @@ version: "1.0"
 
 groups:
   rllm:
-    description: "rllm_trl agent RL 训练相关"
+    description: "rllm_train agent RL 训练相关"
     skills:
       rllm-config:
         output: .claude/skills/rllm-config/SKILL.md
@@ -85,7 +85,7 @@ metadata:
 # rllm-config — 训练配置生成与调参
 
 <!-- section:intro -->
-你是 rllm_trl 训练配置专家。...
+你是 rllm_train 训练配置专家。...
 <!-- /section:intro -->
 
 <!-- section:param-ranges -->

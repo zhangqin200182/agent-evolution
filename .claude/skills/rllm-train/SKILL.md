@@ -1,8 +1,8 @@
 ---
-description: End-to-end automated agent RL training with rllm_trl. Orchestrates requirement
-  clarification, config generation, training execution, monitoring, result analysis,
-  and iterative hyperparameter tuning until training goals are met. Supports auto
-  and approve execution modes.
+description: End-to-end automated agent RL training with rllm_train. Orchestrates
+  requirement clarification, config generation, training execution, monitoring, result
+  analysis, and iterative hyperparameter tuning until training goals are met. Supports
+  auto and approve execution modes.
 metadata:
   categories:
   - machine-learning
@@ -15,7 +15,7 @@ name: rllm-train
 
 # rllm-train — 自动训练主编排
 
-你是 rllm_trl agent RL 训练的全流程编排者。你负责串联需求澄清、配置生成、训练执行、过程监控、结果分析、调参优化的完整闭环，循环直到训练目标达成。
+你是 rllm_train agent RL 训练的全流程编排者。你负责串联需求澄清、配置生成、训练执行、过程监控、结果分析、调参优化的完整闭环，循环直到训练目标达成。
 
 ## 执行规则（必须遵守）
 
@@ -42,10 +42,10 @@ Phase 之间通过以下方式传递数据：
 ```
 Phase 0 → Phase 1: 组装的自然语言描述（如"用 qwen-0.5b 训练数学 agent，reward 达到 0.5"）
 Phase 1 → Phase 2: 需求摘要文本（包含模型、目标、所有参数、停止条件）
-Phase 2 → Phase 3: config.json 文件路径 (rllm_trl/output/runs/<run_id>/config.json)
-Phase 3 → Phase 4: 后台任务 ID + 日志文件路径 (rllm_trl/output/runs/<run_id>/training_log.txt)
+Phase 2 → Phase 3: config.json 文件路径 (rllm_train/output/runs/<run_id>/config.json)
+Phase 3 → Phase 4: 后台任务 ID + 日志文件路径 (rllm_train/output/runs/<run_id>/training_log.txt)
 Phase 4 → Phase 5: 训练完成确认 + run_id
-Phase 5 → Phase 2（循环）: analysis.json 路径 (rllm_trl/output/runs/<run_id>/analysis.json)
+Phase 5 → Phase 2（循环）: analysis.json 路径 (rllm_train/output/runs/<run_id>/analysis.json)
 ```
 
 ## 工作目录
@@ -154,7 +154,7 @@ options:
 Phase 0 最后一步，记录当前 raw 目录下已有的 session 目录：
 ```python
 import os
-existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("trajectory/output/rllm/raw/") else set()
+existing = set(os.listdir("traj_opt/output/rllm/raw/")) if os.path.exists("traj_opt/output/rllm/raw/") else set()
 ```
 将 `existing` 保存为变量，供 Phase 6.5 使用。
 
@@ -183,7 +183,7 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
 
 输入: 需求摘要（首轮）或 analysis.json 中的调参建议（后续轮）
 输出: config.json 文件路径
-完成标志: `rllm_trl/output/runs/<run_id>/config.json` 已生成
+完成标志: `rllm_train/output/runs/<run_id>/config.json` 已生成
 
 在 approve 模式下，展示配置摘要并等待用户确认后再进入 Phase 3。
 
@@ -227,7 +227,7 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
 
 输入: run_id
 输出: 分析报告 + 调参建议（写入 analysis.json）
-完成标志: `rllm_trl/output/runs/<run_id>/analysis.json` 已生成
+完成标志: `rllm_train/output/runs/<run_id>/analysis.json` 已生成
 
 ⚠️ 禁止跳过 rllm-analyze，直接读取日志文件分析 reward 趋势。
 
@@ -290,8 +290,8 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
   ...
 
 总耗时:     <time> (<N> 轮训练)
-最终模型:   rllm_trl/output/runs/<run_id>/final_model/
-所有记录:   rllm_trl/output/runs/<run_id>/
+最终模型:   rllm_train/output/runs/<run_id>/final_model/
+所有记录:   rllm_train/output/runs/<run_id>/
 ```
 
 ## 停止条件判断
@@ -321,7 +321,7 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
 }
 ```
 
-将状态写入 `rllm_trl/output/training_state.json`，以便中断后恢复。
+将状态写入 `rllm_train/output/training_state.json`，以便中断后恢复。
 
 ## 错误恢复策略（修订）
 
@@ -348,7 +348,7 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
    python3 -c "
    import os
    existing = {Phase 0 记录的快照集合}
-   current = set(os.listdir('trajectory/output/rllm/raw/')) if os.path.exists('trajectory/output/rllm/raw/') else set()
+   current = set(os.listdir('traj_opt/output/rllm/raw/')) if os.path.exists('traj_opt/output/rllm/raw/') else set()
    new_sessions = current - existing
    if new_sessions:
        session_id = sorted(new_sessions)[-1]
@@ -362,7 +362,7 @@ existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("tra
 4. 写入轮次状态（含 session_id 和所有 run_ids）:
    ```bash
    python3 -c "
-   from trajectory.round_state import RoundState
+   from traj_opt.round_state import RoundState
    rs = RoundState()
    path = rs.write_training_complete(
        round_num={N},

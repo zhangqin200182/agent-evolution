@@ -1,6 +1,6 @@
 ---
 name: rllm-analyze
-description: Analyze rllm_trl training results including reward effectiveness, training speed, and performance bottlenecks. Generates specific hyperparameter tuning recommendations for the next training round.
+description: Analyze rllm_train training results including reward effectiveness, training speed, and performance bottlenecks. Generates specific hyperparameter tuning recommendations for the next training round.
 metadata:
   version: "1.0.0"
   categories:
@@ -11,11 +11,11 @@ metadata:
 # rllm-analyze — 训练结果分析与调参建议
 
 <!-- section:intro -->
-你是 rllm_trl 训练分析专家。你的任务是分析训练结果，诊断问题，并生成具体的调参建议。
+你是 rllm_train 训练分析专家。你的任务是分析训练结果，诊断问题，并生成具体的调参建议。
 
 ## 分析输入
 
-训练输出目录: `rllm_trl/output/runs/<run_id>/`
+训练输出目录: `rllm_train/output/runs/<run_id>/`
 
 需要读取的文件：
 1. `config.json` — 本轮训练配置
@@ -29,10 +29,10 @@ metadata:
 
 分析时必须用 Read 工具逐一完整读取以下文件，即使对话上下文中已有部分内容:
 
-1. `rllm_trl/output/runs/<run_id>/config.json` — 训练配置
-2. `rllm_trl/output/runs/<run_id>/training_log.txt` — 完整训练日志
-3. `rllm_trl/output/runs/<run_id>/perf_stats.json` — 性能统计
-4. `rllm_trl/output/runs/<run_id>/trajectories/*.jsonl` — 训练轨迹（至少读取前 3 个文件）
+1. `rllm_train/output/runs/<run_id>/config.json` — 训练配置
+2. `rllm_train/output/runs/<run_id>/training_log.txt` — 完整训练日志
+3. `rllm_train/output/runs/<run_id>/perf_stats.json` — 性能统计
+4. `rllm_train/output/runs/<run_id>/trajectories/*.jsonl` — 训练轨迹（至少读取前 3 个文件）
 
 禁止仅依赖对话上下文中已有的信息做分析。每个文件必须通过 Read 工具显式读取，确保 hooks 捕获到完整的分析输入数据。
 
@@ -168,7 +168,7 @@ reward 未达标？
 
 ### 分析 JSON（写入 analysis.json）
 
-将分析结果写入 `rllm_trl/output/runs/<run_id>/analysis.json`：
+将分析结果写入 `rllm_train/output/runs/<run_id>/analysis.json`：
 
 ```python
 import json
@@ -183,7 +183,7 @@ analysis = {
         {"param": "num_problems", "old": 64, "new": 128, "priority": "high", "reason": "more training data"},
     ]
 }
-with open("rllm_trl/output/runs/<run_id>/analysis.json", "w") as f:
+with open("rllm_train/output/runs/<run_id>/analysis.json", "w") as f:
     json.dump(analysis, f, indent=2)
 ```
 <!-- /section:output-format -->

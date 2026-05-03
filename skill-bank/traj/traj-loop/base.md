@@ -27,10 +27,10 @@ metadata:
 3. 每轮结束后输出本轮摘要，最终输出跨轮对比报告
 4. 如果某轮训练失败，记录失败原因，继续下一轮（不中断循环）
 5. **上下文隔离** — rllm-train 和 traj-analyze-rllm 必须在独立的 Agent 子 agent 中执行，确保分析器无法看到训练的执行上下文
-6. **数据流隔离** — traj-xx 步骤只从 trajectory/output/ 读数据，不直接访问 rllm_trl/output/
+6. **数据流隔离** — traj-xx 步骤只从 traj_opt/output/ 读数据，不直接访问 rllm_train/output/
 7. **traj-segment 不可跳过** — 即使轨迹数据为空也必须调用（记录空结果供追溯）
-8. **禁止直接分析训练日志** — 不在编排层 Read/tail rllm_trl/ 文件做分析
-9. **进度可观测** — 通过进度文件（trajectory/output/agent_progress/）实现子 agent 对父对话的进度可见性
+8. **禁止直接分析训练日志** — 不在编排层 Read/tail rllm_train/ 文件做分析
+9. **进度可观测** — 通过进度文件（traj_opt/output/agent_progress/）实现子 agent 对父对话的进度可见性
 <!-- /section:rules -->
 
 <!-- section:steps -->
@@ -58,7 +58,7 @@ for round in 1..N:
     ─────────────────────────────────
     1.1 生成 session_id:
         session_id = f"round_{round}_{timestamp}"
-        创建进度文件 trajectory/output/agent_progress/{session_id}.json
+        创建进度文件 traj_opt/output/agent_progress/{session_id}.json
         写入 status=init
 
     1.2 启动子 agent，prompt 中包含进度文件跟踪要求:
@@ -69,7 +69,7 @@ for round in 1..N:
                     Round {round}/{total_rounds}。
 
                     **进度跟踪**: 在执行过程中，定期更新进度文件:
-                    trajectory/output/agent_progress/{session_id}.json
+                    traj_opt/output/agent_progress/{session_id}.json
 
                     每个 phase 开始/完成时更新进度。
                     训练中定期更新 step/reward。
@@ -91,7 +91,7 @@ for round in 1..N:
 
     1.3 轮询进度文件（每 30 秒）:
         while True:
-            读取 trajectory/output/agent_progress/{session_id}.json
+            读取 traj_opt/output/agent_progress/{session_id}.json
             显示进度:
 
             [Round {round}] 训练进度:
@@ -116,14 +116,14 @@ for round in 1..N:
 
     Step 1.5: 验证轨迹数据完整性
     ─────────────────────────────
-    → ls trajectory/output/raw/ 检查是否有新事件
+    → ls traj_opt/output/raw/ 检查是否有新事件
     → 如果为空: 输出警告 "Hooks 未捕获到训练数据" 但不中断循环
     → 如果有数据: 报告事件数量
 
     Step 2: 分割轨迹
     ─────────────────
     调用 Skill("traj-segment")
-    → 读取 trajectory/output/raw/ → 输出到 trajectory/output/trajectories/
+    → 读取 traj_opt/output/raw/ → 输出到 traj_opt/output/trajectories/
 
     Step 3: 分析 (在独立子 agent 中)
     ─────────────────────────────────
@@ -134,10 +134,10 @@ for round in 1..N:
         Agent(
             prompt="读取 .claude/skills/traj-analyze-rllm/SKILL.md 并按其步骤执行分析。
                     工作目录: /Users/kevin/code/MyProject
-                    只从 trajectory/output/ 读取数据，不要读取 rllm_trl/ 下的文件。
+                    只从 traj_opt/output/ 读取数据，不要读取 rllm_train/ 下的文件。
 
                     **进度跟踪**: 定期更新进度文件:
-                    trajectory/output/agent_progress/{session_id}.json
+                    traj_opt/output/agent_progress/{session_id}.json
 
                     **进度文件格式**:
                     {
@@ -153,12 +153,12 @@ for round in 1..N:
         )
 
         → 子 agent 在全新上下文中执行，物理上看不到 Step 1 的训练细节
-        → 只能从 trajectory/output/ 获取数据
+        → 只能从 traj_opt/output/ 获取数据
         → 返回报告路径
 
     3.3 轮询分析进度（每 30 秒）:
         while True:
-            读取 trajectory/output/agent_progress/{analyze_session_id}.json
+            读取 traj_opt/output/agent_progress/{analyze_session_id}.json
             显示进度
 
             [Round {round}] 分析进度:
@@ -218,7 +218,7 @@ traj-loop 优化报告
 <!-- section:state -->
 ## 状态管理
 
-在 `trajectory/output/loop_state.json` 中维护循环状态:
+在 `traj_opt/output/loop_state.json` 中维护循环状态:
 ```json
 {
   "total_rounds": 3,
@@ -266,8 +266,8 @@ Agent 工具创建独立的子 agent，拥有全新的对话上下文。
 
 ### traj-segment 和 traj-optimize 不需要 Agent 隔离
 
-- traj-segment: 只读 trajectory/output/raw/，不涉及 rllm 内部数据，无隔离需求
-- traj-optimize: 只读 trajectory/output/reports/，生成 patch，无隔离需求
+- traj-segment: 只读 traj_opt/output/raw/，不涉及 rllm 内部数据，无隔离需求
+- traj-optimize: 只读 traj_opt/output/reports/，生成 patch，无隔离需求
 - 这两个在父对话中用 Skill 调用即可
 
 ### Hooks 在 Agent 子 agent 中的行为
@@ -275,16 +275,16 @@ Agent 工具创建独立的子 agent，拥有全新的对话上下文。
 Claude Code Hooks 对子 agent 中的工具调用同样生效:
 - PostToolUse hook 捕获子 agent 1 中 rllm-monitor 的 Read/Bash 调用
 - SubagentStop hook 在子 agent 结束时触发
-- 捕获的事件写入 trajectory/output/raw/，conversation_id 标记为子对话
+- 捕获的事件写入 traj_opt/output/raw/，conversation_id 标记为子对话
 
-这是隔离方案的关键前提: 子 agent 1 中 rllm-xx 读取的训练数据被 hooks 捕获到 trajectory/output/，子 agent 2 才有数据可分析。
+这是隔离方案的关键前提: 子 agent 1 中 rllm-xx 读取的训练数据被 hooks 捕获到 traj_opt/output/，子 agent 2 才有数据可分析。
 
 ### Agent 进度可观测性
 
 子 agent 在独立上下文中执行，对父对话完全黑盒。为实现可观测性，使用共享进度文件:
 
 ```
-trajectory/output/agent_progress/{session_id}.json
+traj_opt/output/agent_progress/{session_id}.json
 ```
 
 **子 agent 端**: 在每个 phase 完成时用 Bash/python3 更新进度文件

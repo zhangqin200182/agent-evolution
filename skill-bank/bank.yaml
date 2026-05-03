@@ -2,7 +2,7 @@ version: "1.0"
 
 groups:
   rllm:
-    description: "rllm_trl agent RL 训练相关"
+    description: "rllm_train agent RL 训练相关"
     skills:
       rllm-config:
         output: .claude/skills/rllm-config/SKILL.md

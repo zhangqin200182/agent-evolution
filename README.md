@@ -18,7 +18,7 @@ flowchart TB
 
     T1 --> T2
 
-    T2 -->|"轨迹数据捕获<br/>trajectory/output/rllm/"| L2
+    T2 -->|"轨迹数据捕获<br/>traj_opt/output/rllm/"| L2
 
     subgraph L2["第2层: 优化 Agent (traj-loop)"]
         direction TB
@@ -30,7 +30,7 @@ flowchart TB
 
     O2 -->|"skill-bank/rllm/ 编译更新"| L1
 
-    O2 -.->|"轨迹数据捕获<br/>trajectory/output/traj/"| L3
+    O2 -.->|"轨迹数据捕获<br/>traj_opt/output/traj/"| L3
 
     subgraph L3["第3层: Meta 优化 Agent (meta-loop, 可选)"]
         direction TB
@@ -47,7 +47,7 @@ flowchart TB
 ```
 
 **核心创新**:
-- **训练闭环**: rllm-train skill 自动驱动 RL 训练流程，自动捕获训练轨迹到 `trajectory/output/rllm/`
+- **训练闭环**: rllm-train skill 自动驱动 RL 训练流程，自动捕获训练轨迹到 `traj_opt/output/rllm/`
 - **优化闭环**: traj-loop skill 基于 Layer 1 轨迹数据自动分析、自动生成 skill 优化补丁，形成自进化循环
 - **Meta 优化闭环** (可选): meta-loop 分析 Layer 2 轨迹，优化 traj-loop 本身，实现三层递归自演进
 - **Layer 隔离**: 按 layer 隔离存储轨迹（rllm/traj/meta），防止分析器读到错误的输入数据
@@ -59,14 +59,14 @@ flowchart TB
 pip install torch transformers trl datasets
 
 # 默认配置（Qwen2.5-0.5B，64 道题，2 个 epoch）
-python -m rllm_trl.train
+python -m rllm_train.train
 
 # 自然语言配置（支持中英文）
-python -m rllm_trl.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
-python -m rllm_trl.train "quick test with 16 problems"
+python -m rllm_train.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
+python -m rllm_train.train "quick test with 16 problems"
 
 # 从配置文件启动（由 rllm-config skill 生成）
-python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json
+python -m rllm_train.run_training rllm_train/output/runs/<run_id>/config.json
 ```
 
 ## 双层 Agent 自演进系统
@@ -88,7 +88,7 @@ flowchart LR
         ANA -->|调参建议| CG
     end
 
-    RT -->|Hooks| TR[trajectory/output/raw/]
+    RT -->|Hooks| TR[traj_opt/output/raw/]
 
     style C fill:#fff9c4,stroke:#f9a825
     style CG fill:#c8e6c9,stroke:#388e3c
@@ -122,9 +122,9 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    RL[rllm-train 执行] -->|Hooks| RAW[trajectory/output/rllm/raw/]
-    RAW -->|traj-segment| TR[trajectory/output/rllm/trajectories/]
-    TR -->|traj-analyze-rllm| REP[trajectory/output/rllm/reports/]
+    RL[rllm-train 执行] -->|Hooks| RAW[traj_opt/output/rllm/raw/]
+    RAW -->|traj-segment| TR[traj_opt/output/rllm/trajectories/]
+    TR -->|traj-analyze-rllm| REP[traj_opt/output/rllm/reports/]
     REP -->|traj-optimize| SB[skill-bank/rllm/]
     SB -->|compile| SK[更强的 rllm-train skill]
 ```
@@ -133,7 +133,7 @@ flowchart LR
 
 优化 agent（traj-loop）和训练 agent（rllm-train）必须保持观察者/被观察者的严格隔离：
 - **上下文隔离**: traj-loop 通过 Claude Code Agent 工具在独立子 agent 中执行，拥有全新对话上下文，物理上无法看到训练过程细节
-- **数据流隔离**: 训练数据只能通过 `trajectory/output/rllm/` 文件系统传递，不经过对话上下文
+- **数据流隔离**: 训练数据只能通过 `traj_opt/output/rllm/` 文件系统传递，不经过对话上下文
 - **Layer 隔离**: rllm-train 轨迹存储在 `rllm/`，traj-loop 轨迹存储在 `traj/`，防止分析器读到错误的输入数据
 - 这确保了优化建议基于客观轨迹数据，而非训练过程的内部状态
 

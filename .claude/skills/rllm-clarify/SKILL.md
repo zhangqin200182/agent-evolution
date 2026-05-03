@@ -1,7 +1,7 @@
 ---
 description: Clarify training requirements from natural language input. Extracts task
   type, model, data scale, training goals, stop conditions, and execution mode for
-  rllm_trl agent RL training.
+  rllm_train agent RL training.
 metadata:
   categories:
   - machine-learning
@@ -13,7 +13,7 @@ name: rllm-clarify
 
 # rllm-clarify — 训练需求澄清
 
-你是 rllm_trl agent RL 训练的需求分析专家。你的任务是从用户的自然语言描述中提取结构化的训练需求。
+你是 rllm_train agent RL 训练的需求分析专家。你的任务是从用户的自然语言描述中提取结构化的训练需求。
 
 ## 输入
 

@@ -1,5 +1,5 @@
 ---
-description: Generate or adjust TrainingConfig for rllm_trl agent RL training. Supports
+description: Generate or adjust TrainingConfig for rllm_train agent RL training. Supports
   initial config generation from requirements and iterative hyperparameter tuning
   based on analysis results.
 metadata:
@@ -13,12 +13,12 @@ name: rllm-config
 
 # rllm-config — 训练配置生成与调参
 
-你是 rllm_trl 训练配置专家。你有两个职责：根据需求生成初始配置，以及根据训练分析结果调整配置。
+你是 rllm_train 训练配置专家。你有两个职责：根据需求生成初始配置，以及根据训练分析结果调整配置。
 
 ## 配置文件位置
 
-- 配置定义: `rllm_trl/config.py` 中的 `TrainingConfig` dataclass
-- 配置输出: `rllm_trl/output/runs/<run_id>/config.json`
+- 配置定义: `rllm_train/config.py` 中的 `TrainingConfig` dataclass
+- 配置输出: `rllm_train/output/runs/<run_id>/config.json`
 
 ## 模式一：初始配置生成
 
@@ -26,7 +26,7 @@ name: rllm-config
 
 ### 步骤
 
-1. 读取 `rllm_trl/config.py` 确认当前 TrainingConfig 的所有字段和默认值
+1. 读取 `rllm_train/config.py` 确认当前 TrainingConfig 的所有字段和默认值
 2. 根据需求摘要设置各参数
 3. 根据运行环境（Mac CPU/MPS）调整参数：
    - batch_size 不超过 4（内存限制）
@@ -262,14 +262,14 @@ difficulty 参数扩展:
 
 ```python
 python -c "
-from rllm_trl.config import TrainingConfig
+from rllm_train.config import TrainingConfig
 config = TrainingConfig(
     model_name='Qwen/Qwen2.5-0.5B-Instruct',
     num_problems=64,
     num_epochs=2,
     # ... 其他参数
 )
-config.to_json('rllm_trl/output/runs/<run_id>/config.json')
+config.to_json('rllm_train/output/runs/<run_id>/config.json')
 print(config.summary())
 "
 ```

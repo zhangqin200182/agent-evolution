@@ -2,14 +2,14 @@
 
 > Agent RL 训练 + 自动 Skill 优化系统。通过轨迹分析自动发现训练问题，生成 skill-bank patch，形成持续优化闭环。
 
-> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_trl/`，待重命名），`traj_opt` 指代优化后端（代码目录 `trajectory/`，待重命名）。
+> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_train/`），`traj_opt` 指代优化后端（代码目录 `traj_opt/`）。
 
 ## 1. 四层架构
 
 | 层 | 模块 | 代码目录 | 职责 |
 |----|------|---------|------|
-| 训练后端 | rllm_train | `rllm_trl/` | Agent RL 训练 pipeline：模型加载、rollout、GRPO 训练、reward 计算 |
-| 优化后端 | traj_opt | `trajectory/` | 轨迹捕获、存储、分割、分析基础设施、patch 生成 |
+| 训练后端 | rllm_train | `rllm_train/` | Agent RL 训练 pipeline：模型加载、rollout、GRPO 训练、reward 计算 |
+| 优化后端 | traj_opt | `traj_opt/` | 轨迹捕获、存储、分割、分析基础设施、patch 生成 |
 | Skill 管理 | skill-bank | `skill-bank/` | base + patch + compile 架构，管理 skill 的版本和优化 |
 | Skills | rllm-xx / traj-xx | `skill-bank/rllm/` / `skill-bank/traj/` | 两组 Claude Code skill，是系统的使用入口 |
 
@@ -39,7 +39,7 @@
               ▼                                   ▼
 ┌──────────────────────┐            ┌──────────────────────────────┐
 │  rllm_train          │            │  traj_opt                     │
-│  (rllm_trl/)         │            │  (trajectory/)                │
+│  (rllm_train/)         │            │  (traj_opt/)                │
 │                      │            │                               │
 │  训练 pipeline:       │  hooks     │  捕获 → 存储 → 分割 →         │
 │  config → rollout    │ ────────→  │  分析基础设施 → patch 生成     │
@@ -60,7 +60,7 @@
 
 ### 三层自演进
 
-- **Layer 1 (rllm)**: 训练 agent，轨迹存储在 `trajectory/output/rllm/`
+- **Layer 1 (rllm)**: 训练 agent，轨迹存储在 `traj_opt/output/rllm/`
 - **Layer 2 (traj)**: 优化 agent，分析 Layer 1 轨迹，生成 `skill-bank/rllm/` 的 patch
 - **Layer 3 (meta, 可选)**: Meta 优化，分析 Layer 2 轨迹，生成 `skill-bank/traj/` 的 patch
 
@@ -91,7 +91,7 @@
            │  writes (hooks)                     │  reads
            ▼                                     ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                    轨迹存储 (trajectory/output/)                   │
+│                    轨迹存储 (traj_opt/output/)                   │
 │  rllm/raw/{session}/events.jsonl    CLI-1 hooks 写入              │
 │  rllm/trajectories/                 CLI-2 traj-segment 写入       │
 │  rllm/reports/                      CLI-2 traj-analyze 写入       │
@@ -105,7 +105,7 @@
 
 ## 4. 轮次协调协议
 
-路径：`trajectory/output/rounds/round_{n}/status.json`
+路径：`traj_opt/output/rounds/round_{n}/status.json`
 
 ```json
 {
@@ -145,8 +145,8 @@ CLI-1 每次执行训练必须新建进程，保证一个 session_id 对应一�
 | 维度 | 机制 | 说明 |
 |------|------|------|
 | 上下文隔离 | 双 CLI 独立进程 | CLI-2 物理上无法看到 CLI-1 的执行上下文 |
-| 数据流隔离 | `trajectory/output/` 单一通道 | traj-xx 只从 trajectory/output/ 读取，rllm-xx 通过 hooks 写入 |
-| 文件目录隔离 | skill 指令中的 data-boundary 规则 | `rllm_trl/` 属于 rllm-xx，`trajectory/` 属于 traj-xx |
+| 数据流隔离 | `traj_opt/output/` 单一通道 | traj-xx 只从 traj_opt/output/ 读取，rllm-xx 通过 hooks 写入 |
+| 文件目录隔离 | skill 指令中的 data-boundary 规则 | `rllm_train/` 属于 rllm-xx，`traj_opt/` 属于 traj-xx |
 | 领域知识隔离 | 模式识别替代硬编码表 | traj-analyze-rllm 的领域知识来自轨迹模式推断 |
 | Layer 数据隔离 | 按 layer 隔离存储 | rllm 轨迹在 `rllm/`，traj 轨迹在 `traj/`，防止交叉读取 |
 
@@ -154,9 +154,9 @@ CLI-1 每次执行训练必须新建进程，保证一个 session_id 对应一�
 
 | 目录 | 归属 | traj-xx 可访问 | rllm-xx 可访问 |
 |------|------|---------------|---------------|
-| `rllm_trl/` | rllm-xx | 禁止 | 完全访问 |
+| `rllm_train/` | rllm-xx | 禁止 | 完全访问 |
 | `skill-bank/rllm/` | rllm-xx | 禁止 | 完全访问 |
-| `trajectory/output/rllm/` | traj-xx | 完全访问 | 不感知 |
+| `traj_opt/output/rllm/` | traj-xx | 完全访问 | 不感知 |
 | `skill-bank/traj/` | traj-xx | 完全访问 | 不感知 |
 
 ## 6. 优化目标边界
@@ -195,7 +195,7 @@ traj-optimize 自动生成 skill-bank patch，但需要人工确认后才编译�
 
 基于 Round 1 和 Round 2 端到端实测：
 
-- **session_id 快照差分法**: `os.environ.get('CLAUDE_SESSION_ID')` 在 hooks 中返回 unknown。改用快照差分：Phase 0 记录 `trajectory/output/rllm/raw/` 目录快照，Phase 6.5 取差集得到本次 session_id
+- **session_id 快照差分法**: `os.environ.get('CLAUDE_SESSION_ID')` 在 hooks 中返回 unknown。改用快照差分：Phase 0 记录 `traj_opt/output/rllm/raw/` 目录快照，Phase 6.5 取差集得到本次 session_id
 - **session 过滤**: `get_rllm_trajectories()` 支持 session_id 参数，避免历史数据污染当前轮次分析
 - **PatchGenerator 增强**: 自动激活 patch（`_activate_patch`）、section 校验（`_validate_target_section`）、group 校验（`_validate_target_group`）
 - **traj-launch-training**: 在 CLI-2 中一键启动新 CLI-1。交互式用 osascript 打开新 Terminal.app 窗口，非交互式用 `claude -p --permission-mode auto`

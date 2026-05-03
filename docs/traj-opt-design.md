@@ -2,7 +2,7 @@
 
 > Skill 自动优化的 Python 后端。提供轨迹捕获、存储、分割、分析基础设施和 patch 生成能力。
 
-> 命名说明：文档中 `traj_opt` 指代优化后端（代码目录 `trajectory/`，待重命名）。跨模块设计（架构、隔离、双 CLI）见 `system-overview.md`。
+> 命名说明：文档中 `traj_opt` 指代优化后端（代码目录 `traj_opt/`）。跨模块设计（架构、隔离、双 CLI）见 `system-overview.md`。
 
 ## 1. 概述
 
@@ -90,7 +90,7 @@ class SkillOptimizationSuggestion:
 所有数据使用 JSONL 格式，按 layer 隔离存储：
 
 ```
-trajectory/output/
+traj_opt/output/
 ├── rllm/                          # Layer 1 轨迹
 │   ├── raw/{session_id}/events.jsonl
 │   ├── trajectories/{session_id}/trajectories.jsonl
@@ -142,9 +142,9 @@ trajectory/
 ```json
 {
   "hooks": {
-    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "python trajectory/hooks/post_tool.py"}]}],
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "python trajectory/hooks/on_stop.py"}]}],
-    "SubagentStop": [{"matcher": "", "hooks": [{"type": "command", "command": "python trajectory/hooks/on_stop.py --subagent"}]}]
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "python traj_opt/hooks/post_tool.py"}]}],
+    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "python traj_opt/hooks/on_stop.py"}]}],
+    "SubagentStop": [{"matcher": "", "hooks": [{"type": "command", "command": "python traj_opt/hooks/on_stop.py --subagent"}]}]
   }
 }
 ```
@@ -257,7 +257,7 @@ class PatchGenerator:
 ```python
 @dataclass
 class TrajectoryConfig:
-    output_dir: str = "trajectory/output"
+    output_dir: str = "traj_opt/output"
     capture_all_tools: bool = True
     default_segmenter: str = "default"
     analysis_lookback_days: int = 7

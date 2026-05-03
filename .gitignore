@@ -3,7 +3,7 @@ rllm/
 trl/
 
 # Training outputs
-rllm_trl/output/
+rllm_train/output/
 
 # Python
 __pycache__/

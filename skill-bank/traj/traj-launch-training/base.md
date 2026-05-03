@@ -40,7 +40,7 @@ metadata:
 
 如果 round=next:
 ```python
-from trajectory.round_state import RoundState
+from traj_opt.round_state import RoundState
 round_num = RoundState().find_pending_training()
 if round_num is None:
     输出 "没有待训练的轮次。上一轮可能尚未完成优化。"
@@ -51,7 +51,7 @@ if round_num is None:
 
 - 如果 round > 1，检查上一轮 optimization_complete:
   ```python
-  from trajectory.round_state import RoundState
+  from traj_opt.round_state import RoundState
   rs = RoundState()
   prev = rs.read_status(round_num - 1)
   if not prev or prev.get("status") != "optimization_complete":
@@ -71,7 +71,7 @@ if round_num is None:
 
 准备日志目录:
 ```bash
-mkdir -p trajectory/output/rounds/round_{N}
+mkdir -p traj_opt/output/rounds/round_{N}
 ```
 
 #### 交互式（默认）
@@ -93,8 +93,8 @@ end tell
 ```bash
 claude -p --permission-mode auto \
   "/rllm-train round={N} | {描述}" \
-  > trajectory/output/rounds/round_{N}/cli1.log 2>&1 &
-echo $! > trajectory/output/rounds/round_{N}/cli1.pid
+  > traj_opt/output/rounds/round_{N}/cli1.log 2>&1 &
+echo $! > traj_opt/output/rounds/round_{N}/cli1.pid
 ```
 
 ### 4. 输出
@@ -112,7 +112,7 @@ Round {N} 训练已在新终端窗口中启动。
 ```
 Round {N} 训练已在后台启动:
   PID:  {pid}
-  日志: trajectory/output/rounds/round_{N}/cli1.log
+  日志: traj_opt/output/rounds/round_{N}/cli1.log
 
 等待训练完成后执行:
   /traj-train-optimize round={N}

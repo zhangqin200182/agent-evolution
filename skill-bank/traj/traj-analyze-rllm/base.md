@@ -31,18 +31,18 @@ metadata:
 
 | 路径 | 内容 | 用途 |
 |------|------|------|
-| `trajectory/output/raw/{session_id}/events.jsonl` | 原始 hook 事件 | 提取训练数据（从 tool_response 字段） |
-| `trajectory/output/trajectories/{session_id}/trajectories.jsonl` | 分割后轨迹 | 主要分析输入 |
-| `trajectory/output/reports/` | 历史分析报告 | 跨轮次对比 |
-| `trajectory/output/index.jsonl` | 全局索引 | 查找相关 session |
+| `traj_opt/output/raw/{session_id}/events.jsonl` | 原始 hook 事件 | 提取训练数据（从 tool_response 字段） |
+| `traj_opt/output/trajectories/{session_id}/trajectories.jsonl` | 分割后轨迹 | 主要分析输入 |
+| `traj_opt/output/reports/` | 历史分析报告 | 跨轮次对比 |
+| `traj_opt/output/index.jsonl` | 全局索引 | 查找相关 session |
 
 ### 禁止直接读取的数据源
 
 | 路径 | 原因 |
 |------|------|
-| `rllm_trl/output/runs/*/` | 属于 rllm-xx，只能通过轨迹间接获取 |
-| `rllm_trl/config.py` | 属于 rllm-xx 内部实现 |
-| `rllm_trl/*.py` | 属于 rllm-xx 内部实现 |
+| `rllm_train/output/runs/*/` | 属于 rllm-xx，只能通过轨迹间接获取 |
+| `rllm_train/config.py` | 属于 rllm-xx 内部实现 |
+| `rllm_train/*.py` | 属于 rllm-xx 内部实现 |
 | `skill-bank/rllm/*/base.md` | 属于 rllm-xx skill 源码 |
 | `.claude/skills/rllm-*/SKILL.md` | 属于 rllm-xx 编译产物 |
 
@@ -53,7 +53,7 @@ metadata:
 - rllm-monitor 执行过程中 tail 的 training_log.txt 输出
 - 任何 rllm-xx 执行过程中的中间状态
 
-唯一的数据来源是 trajectory/output/ 目录下的文件。
+唯一的数据来源是 traj_opt/output/ 目录下的文件。
 <!-- /section:data-boundary -->
 
 <!-- section:analysis-framework -->
@@ -85,8 +85,8 @@ metadata:
 ### 1. 加载轨迹
 
 ```python
-from trajectory.analyzer.base import AnalyzerBase
-from trajectory.config import DEFAULT_CONFIG
+from traj_opt.analyzer.base import AnalyzerBase
+from traj_opt.config import DEFAULT_CONFIG
 
 analyzer = AnalyzerBase(DEFAULT_CONFIG)
 ```
@@ -107,7 +107,7 @@ trajectories = analyzer.get_rllm_trajectories()
 
 对每条 rllm-train 轨迹:
 
-a) 读取 trajectory/output/trajectories/{session_id}/trajectories.jsonl
+a) 读取 traj_opt/output/trajectories/{session_id}/trajectories.jsonl
    → 定位 skill_name="rllm-*" 的轨迹
 
 b) 从轨迹的 tool_calls 中提取训练数据:
@@ -118,7 +118,7 @@ b) 从轨迹的 tool_calls 中提取训练数据:
 
 c) 使用 Python 辅助方法简化提取:
    ```python
-   from trajectory.analyzer.base import AnalyzerBase
+   from traj_opt.analyzer.base import AnalyzerBase
    analyzer = AnalyzerBase(DEFAULT_CONFIG)
    # 如果指定了 --session，传递 session_id 过滤
    training_data_list = analyzer.get_available_training_data(session_id="{session_id}" if session_id else None)
@@ -176,7 +176,7 @@ rllm-train 轨迹: {count} 条
 ### 5. 保存报告
 
 ```python
-from trajectory.analyzer.report import ReportWriter
+from traj_opt.analyzer.report import ReportWriter
 
 writer = ReportWriter(DEFAULT_CONFIG)
 report_path = writer.write_report(report_content, prefix="rllm-analysis")

@@ -11,7 +11,7 @@ metadata:
 # traj-segment — 轨迹分割
 
 <!-- section:intro -->
-你是轨迹分割工具。你的职责是将 trajectory/output/raw/ 中的原始事件流分割为有意义的轨迹单元（Trajectory），存储到 trajectory/output/trajectories/。
+你是轨迹分割工具。你的职责是将 traj_opt/output/raw/ 中的原始事件流分割为有意义的轨迹单元（Trajectory），存储到 traj_opt/output/trajectories/。
 <!-- /section:intro -->
 
 <!-- section:steps -->
@@ -20,8 +20,8 @@ metadata:
 ### 1. 读取原始事件
 
 ```python
-from trajectory.store.reader import EventReader
-from trajectory.config import DEFAULT_CONFIG
+from traj_opt.store.reader import EventReader
+from traj_opt.config import DEFAULT_CONFIG
 
 reader = EventReader(DEFAULT_CONFIG)
 sessions = reader.list_sessions()
@@ -32,7 +32,7 @@ sessions = reader.list_sessions()
 ### 2. 执行分割
 
 ```python
-from trajectory.segmenter.registry import SegmenterRegistry
+from traj_opt.segmenter.registry import SegmenterRegistry
 
 registry = SegmenterRegistry()
 events = reader.read_session_events(session_id)
@@ -46,8 +46,8 @@ trajectories = registry.segment(events)
 ### 3. 写入轨迹
 
 ```python
-from trajectory.store.writer import TrajectoryWriter
-from trajectory.store.index import IndexManager
+from traj_opt.store.writer import TrajectoryWriter
+from traj_opt.store.index import IndexManager
 
 writer = TrajectoryWriter(DEFAULT_CONFIG)
 writer.write_session_trajectories(session_id, trajectories)

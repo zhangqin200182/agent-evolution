@@ -19,7 +19,7 @@ metadata:
 
 ### 1. 读取分析报告
 
-读取 `trajectory/output/reports/` 下最新的分析报告（或指定的报告路径）。
+读取 `traj_opt/output/reports/` 下最新的分析报告（或指定的报告路径）。
 
 从报告的"优化建议"部分提取结构化建议:
 - skill_name (目标 skill，必须属于 `skill-bank/rllm/` group)
@@ -35,8 +35,8 @@ metadata:
 ### 2. 生成 patch 文件
 
 ```python
-from trajectory.optimizer.patch_generator import PatchGenerator
-from trajectory.adapter.schema import SkillOptimizationSuggestion
+from traj_opt.optimizer.patch_generator import PatchGenerator
+from traj_opt.adapter.schema import SkillOptimizationSuggestion
 
 generator = PatchGenerator()
 
@@ -86,7 +86,7 @@ Patch: {patch_id}
 
 用户确认后:
 ```python
-from trajectory.optimizer.compiler_bridge import CompilerBridge
+from traj_opt.optimizer.compiler_bridge import CompilerBridge
 
 bridge = CompilerBridge()
 for skill_name in affected_skills:

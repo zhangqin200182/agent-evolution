@@ -2,7 +2,7 @@
 
 > 两组 Claude Code skill 的职责划分、调用关系和编排逻辑。Skills 是系统的使用入口。
 
-> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_trl/`），`traj_opt` 指代优化后端（代码目录 `trajectory/`）。
+> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_train/`），`traj_opt` 指代优化后端（代码目录 `traj_opt/`）。
 
 ## 1. 概述
 
@@ -141,16 +141,16 @@ CLI-2 中一键启动训练和优化：
 
 | 路径 | 用途 |
 |------|------|
-| `trajectory/output/trajectories/{session_id}/trajectories.jsonl` | 分割后轨迹（主要输入） |
-| `trajectory/output/raw/{session_id}/events.jsonl` | 原始事件（补充） |
-| `trajectory/output/reports/` | 历史报告（跨轮次对比） |
-| `trajectory/output/index.jsonl` | 索引（查找相关 session） |
+| `traj_opt/output/trajectories/{session_id}/trajectories.jsonl` | 分割后轨迹（主要输入） |
+| `traj_opt/output/raw/{session_id}/events.jsonl` | 原始事件（补充） |
+| `traj_opt/output/reports/` | 历史报告（跨轮次对比） |
+| `traj_opt/output/index.jsonl` | 索引（查找相关 session） |
 
 禁止直接读取被观察 skill 的内部输出目录、源代码或 skill-bank 源文件。
 
 ### 输出协议
 
-输出到 `trajectory/output/reports/`，每个问题必须包含证据（引用 session_id 和轨迹数据）和置信度。
+输出到 `traj_opt/output/reports/`，每个问题必须包含证据（引用 session_id 和轨迹数据）和置信度。
 
 ### 领域知识规范
 
@@ -171,19 +171,19 @@ CLI-2 中一键启动训练和优化：
 
 | Skill Group | 后端 | 关系 |
 |-------------|------|------|
-| rllm-xx | rllm_train (`rllm_trl/`) | rllm_train 独立可运行，skills 是自动化编排层 |
-| traj-xx | traj_opt (`trajectory/`) | traj_opt 是 skills 的 Python 后端，提供基础设施 |
+| rllm-xx | rllm_train (`rllm_train/`) | rllm_train 独立可运行，skills 是自动化编排层 |
+| traj-xx | traj_opt (`traj_opt/`) | traj_opt 是 skills 的 Python 后端，提供基础设施 |
 
 rllm-xx skills 中的代码片段调用 rllm_train 的接口：
 ```python
-from rllm_trl.config import TrainingConfig
-config = TrainingConfig.from_json('rllm_trl/output/runs/<run_id>/config.json')
+from rllm_train.config import TrainingConfig
+config = TrainingConfig.from_json('rllm_train/output/runs/<run_id>/config.json')
 ```
 
 traj-xx skills 中的代码片段调用 traj_opt 的接口：
 ```python
-from trajectory.analyzer.base import AnalyzerBase
-from trajectory.optimizer.patch_generator import PatchGenerator
+from traj_opt.analyzer.base import AnalyzerBase
+from traj_opt.optimizer.patch_generator import PatchGenerator
 ```
 
 Skill 定义分析策略和领域知识（在 SKILL.md 中），Python 代码提供基础设施（读取轨迹、生成 patch、编译）。

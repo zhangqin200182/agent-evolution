@@ -1,5 +1,5 @@
 ---
-description: Launch rllm_trl training process. Starts training in background using
+description: Launch rllm_train training process. Starts training in background using
   JSON config, records process info for monitoring.
 metadata:
   categories:
@@ -12,11 +12,11 @@ name: rllm-run
 
 # rllm-run — 启动训练
 
-你负责启动 rllm_trl 训练进程并确保它正常运行。
+你负责启动 rllm_train 训练进程并确保它正常运行。
 
 ## 前置条件
 
-- 配置文件已生成: `rllm_trl/output/runs/<run_id>/config.json`
+- 配置文件已生成: `rllm_train/output/runs/<run_id>/config.json`
 - 工作目录: `/Users/kevin/code/MyProject`
 
 ## 启动流程
@@ -27,8 +27,8 @@ name: rllm-run
 
 ```bash
 python -c "
-from rllm_trl.config import TrainingConfig
-config = TrainingConfig.from_json('rllm_trl/output/runs/<run_id>/config.json')
+from rllm_train.config import TrainingConfig
+config = TrainingConfig.from_json('rllm_train/output/runs/<run_id>/config.json')
 print(config.summary())
 "
 ```
@@ -38,7 +38,7 @@ print(config.summary())
 使用 Bash 工具的 `run_in_background` 模式启动训练，将输出重定向到日志文件：
 
 ```bash
-cd /Users/kevin/code/MyProject && python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json 2>&1 | tee rllm_trl/output/runs/<run_id>/training_log.txt
+cd /Users/kevin/code/MyProject && python -m rllm_train.run_training rllm_train/output/runs/<run_id>/config.json 2>&1 | tee rllm_train/output/runs/<run_id>/training_log.txt
 ```
 
 ### 3. 确认启动成功
@@ -56,8 +56,8 @@ cd /Users/kevin/code/MyProject && python -m rllm_trl.run_training rllm_trl/outpu
 ```
 训练已启动：
   Run ID:    <run_id>
-  配置文件:  rllm_trl/output/runs/<run_id>/config.json
-  日志文件:  rllm_trl/output/runs/<run_id>/training_log.txt
+  配置文件:  rllm_train/output/runs/<run_id>/config.json
+  日志文件:  rllm_train/output/runs/<run_id>/training_log.txt
   后台任务:  <task_id>
 ```
 

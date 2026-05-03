@@ -34,7 +34,7 @@
 ## 2026-05-02: 隔离设计与 trajectory 模块
 
 - **数据表面化准则**: rllm-monitor/analyze 必须用 Read/Bash 显式读取训练数据，确保 hooks 捕获
-- **数据边界**: traj-analyze-rllm 只从 trajectory/output/ 读数据，禁止直接访问 rllm_trl/
+- **数据边界**: traj-analyze-rllm 只从 traj_opt/output/ 读数据，禁止直接访问 rllm_train/
 - **Agent 子 agent 方案 (Section 17)**: 尝试单 CLI + Agent 隔离，实测失败（Agent 同步阻塞）
 - **双 CLI 架构 (Section 18)**: CLI-1 训练 + CLI-2 优化，通过 rounds/status.json 协调
 

@@ -11,7 +11,7 @@ metadata:
 # traj-setup — 轨迹捕获初始化
 
 <!-- section:intro -->
-你是 trajectory 模块的初始化工具。你的职责是配置 Claude Code Hooks，使所有后续的工具调用被自动捕获到 trajectory/output/ 目录。
+你是 trajectory 模块的初始化工具。你的职责是配置 Claude Code Hooks，使所有后续的工具调用被自动捕获到 traj_opt/output/ 目录。
 <!-- /section:intro -->
 
 <!-- section:steps -->
@@ -34,7 +34,7 @@ metadata:
         "hooks": [
           {
             "type": "command",
-            "command": "python trajectory/hooks/post_tool.py"
+            "command": "python traj_opt/hooks/post_tool.py"
           }
         ]
       }
@@ -45,7 +45,7 @@ metadata:
         "hooks": [
           {
             "type": "command",
-            "command": "python trajectory/hooks/on_stop.py"
+            "command": "python traj_opt/hooks/on_stop.py"
           }
         ]
       }
@@ -56,7 +56,7 @@ metadata:
         "hooks": [
           {
             "type": "command",
-            "command": "python trajectory/hooks/on_stop.py --subagent"
+            "command": "python traj_opt/hooks/on_stop.py --subagent"
           }
         ]
       }
@@ -68,12 +68,12 @@ metadata:
 ### 3. 创建输出目录
 
 ```bash
-mkdir -p trajectory/output/{raw,trajectories,reports}
+mkdir -p traj_opt/output/{raw,trajectories,reports}
 ```
 
 ### 4. 验证 .gitignore
 
-确认 `trajectory/.gitignore` 包含 `trajectory/output/`。
+确认 `trajectory/.gitignore` 包含 `traj_opt/output/`。
 
 ### 5. 确认
 
@@ -81,7 +81,7 @@ mkdir -p trajectory/output/{raw,trajectories,reports}
 ```
 ✓ Trajectory hooks 已配置
 ✓ 输出目录已创建
-✓ 所有后续工具调用将自动被捕获到 trajectory/output/raw/
+✓ 所有后续工具调用将自动被捕获到 traj_opt/output/raw/
 ```
 <!-- /section:steps -->
 

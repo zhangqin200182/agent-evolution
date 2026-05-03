@@ -2,7 +2,7 @@
 
 > 自包含的 Agent RL 训练 pipeline，结合 rLLM 的 agent/environment 抽象与 TRL 的 GRPOTrainer。
 
-> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_trl/`，待重命名）。
+> 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_train/`）。
 
 ## 1. 概述
 
@@ -62,7 +62,7 @@ rollout function 处理 asyncio event loop 边缘情况（running loop 检测、
 ### 输出目录
 
 ```
-rllm_trl/output/runs/<run_id>/
+rllm_train/output/runs/<run_id>/
 ├── config.json          # 训练配置
 ├── training_log.txt     # 训练日志（reward/loss 趋势）
 ├── perf_stats.json      # 性能统计
@@ -75,12 +75,12 @@ rllm_trl/output/runs/<run_id>/
 
 ```bash
 # 默认配置
-python -m rllm_trl.train
+python -m rllm_train.train
 
 # 自然语言配置
-python -m rllm_trl.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
-python -m rllm_trl.train "quick test with 16 problems"
+python -m rllm_train.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
+python -m rllm_train.train "quick test with 16 problems"
 
 # 从配置文件（由 rllm-config skill 生成）
-python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json
+python -m rllm_train.run_training rllm_train/output/runs/<run_id>/config.json
 ```

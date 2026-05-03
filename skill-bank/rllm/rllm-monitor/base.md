@@ -1,6 +1,6 @@
 ---
 name: rllm-monitor
-description: Monitor rllm_trl training progress in real-time. Tracks reward trends, training speed, and detects anomalies like loss explosion or process crashes.
+description: Monitor rllm_train training progress in real-time. Tracks reward trends, training speed, and detects anomalies like loss explosion or process crashes.
 metadata:
   version: "1.0.0"
   categories:
@@ -11,13 +11,13 @@ metadata:
 # rllm-monitor — 训练过程监控
 
 <!-- section:intro -->
-你负责实时监控 rllm_trl 训练进度，向用户汇报关键指标，并检测异常。
+你负责实时监控 rllm_train 训练进度，向用户汇报关键指标，并检测异常。
 
 ## 监控目标
 
-- 日志文件: `rllm_trl/output/runs/<run_id>/training_log.txt`
-- 性能统计: `rllm_trl/output/runs/<run_id>/perf_stats.json`（训练结束后生成）
-- 轨迹文件: `rllm_trl/output/runs/<run_id>/trajectories/`（训练过程中逐步生成）
+- 日志文件: `rllm_train/output/runs/<run_id>/training_log.txt`
+- 性能统计: `rllm_train/output/runs/<run_id>/perf_stats.json`（训练结束后生成）
+- 轨迹文件: `rllm_train/output/runs/<run_id>/trajectories/`（训练过程中逐步生成）
 <!-- /section:intro -->
 
 <!-- section:monitoring-methods -->
@@ -28,7 +28,7 @@ metadata:
 使用 Monitor 工具监控训练日志：
 
 ```bash
-tail -f rllm_trl/output/runs/<run_id>/training_log.txt | grep -E --line-buffered "/[0-9]+|···|Error|Traceback|FAILED|OOM|Training Report"
+tail -f rllm_train/output/runs/<run_id>/training_log.txt | grep -E --line-buffered "/[0-9]+|···|Error|Traceback|FAILED|OOM|Training Report"
 ```
 
 ### 定期检查（训练进行中）
@@ -36,12 +36,12 @@ tail -f rllm_trl/output/runs/<run_id>/training_log.txt | grep -E --line-buffered
 每隔一段时间读取日志文件尾部，提取关键指标：
 
 ```bash
-tail -20 rllm_trl/output/runs/<run_id>/training_log.txt
+tail -20 rllm_train/output/runs/<run_id>/training_log.txt
 ```
 
 ### 训练日志格式
 
-rllm_trl 的 TrainingLogger 输出格式（参考 `rllm_trl/logger.py`）：
+rllm_train 的 TrainingLogger 输出格式（参考 `rllm_train/logger.py`）：
 
 进度行格式（每个 step 会输出多行子步骤 + 一行汇总）:
 ```
