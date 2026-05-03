@@ -1,8 +1,9 @@
 ---
 name: traj-loop
-description: Top-level orchestration skill that drives the full trajectory optimization loop. Runs rllm-train, captures trajectories, segments, analyzes, and generates patches in an automated cycle.
+description: "[DEPRECATED] Top-level orchestration skill that drives the full trajectory optimization loop. Replaced by dual-CLI architecture: use /rllm-train in CLI-1 and /traj-train-optimize in CLI-2."
 metadata:
   version: "1.0.0"
+  deprecated: true
   categories:
     - trajectory
     - orchestration
@@ -11,6 +12,10 @@ metadata:
 # traj-loop — 全自动轨迹优化编排
 
 <!-- section:intro -->
+> **已废弃**: 此 skill 已被双 CLI 架构替代。
+> 请在 CLI-1 中使用 /rllm-train，在 CLI-2 中使用 /traj-train-optimize。
+> 详见 `docs/trajectory-design.md` Section 18。
+
 你是轨迹优化的顶层编排者。你驱动完整的闭环: 训练 → 捕获 → 分割 → 分析 → 优化，循环指定轮次。每轮使用上一轮优化后的 skill 执行训练，实现 skill 的持续自动优化。
 <!-- /section:intro -->
 

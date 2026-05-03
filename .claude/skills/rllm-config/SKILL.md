@@ -223,6 +223,12 @@ difficulty 参数扩展:
 - 出现后期 forgetting: 减少到 36
 - 禁止 0.5B+mixed 使用 num_problems > 48
 
+**Loss=0 诊断**:
+| 症状 | 调整 | 原因 |
+|------|------|------|
+| loss=0 全程 + reward >= 0.8 | difficulty 提升一级 (simple→mixed, mixed→hard) | 题目太简单，模型预训练能力已覆盖，GRPO 无学习信号 |
+| loss=0 全程 + reward < 0.5 | 检查 num_generations 和 temperature | reward variance 不足，GRPO baseline 估计有问题 |
+
 ## 配置预检（生成配置后、启动前执行）
 
 ### 必检项（不通过则拒绝启动）

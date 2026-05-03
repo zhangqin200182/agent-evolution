@@ -23,12 +23,15 @@ class AnalyzerBase:
         self.config = config
         self.reader = TrajectoryReader(config)
 
-    def get_rllm_trajectories(self, days: Optional[int] = None) -> List[Trajectory]:
+    def get_rllm_trajectories(self, days: Optional[int] = None, session_id: Optional[str] = None) -> List[Trajectory]:
         """Get rllm-train related trajectories from Layer 1 (rllm)."""
-        all_trajs = self.reader.read_recent_trajectories(days)
+        if session_id:
+            all_trajs = self.reader.read_session_trajectories(session_id, layer="rllm")
+        else:
+            all_trajs = self.reader.read_recent_trajectories(days)
         return [
             t for t in all_trajs
-            if t.layer == "rllm"
+            if (session_id or t.layer == "rllm")
             and t.trajectory_type == TrajectoryType.SKILL
             and t.skill_name
             and t.skill_name.startswith("rllm-")
@@ -68,6 +71,7 @@ class AnalyzerBase:
         ]
 
         return {
+            "session_id": traj.session_id,
             "trajectory_id": traj.trajectory_id,
             "type": traj.trajectory_type.value,
             "skill_name": traj.skill_name,
@@ -126,9 +130,9 @@ class AnalyzerBase:
 
         return result
 
-    def get_available_training_data(self, days: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_available_training_data(self, days: Optional[int] = None, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all rllm trajectories with extracted training data."""
-        trajs = self.get_rllm_trajectories(days)
+        trajs = self.get_rllm_trajectories(days, session_id=session_id)
         results = []
         for traj in trajs:
             summary = self.summarize_trajectory(traj)

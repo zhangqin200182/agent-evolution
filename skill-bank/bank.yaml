@@ -32,6 +32,10 @@ groups:
         output: .claude/skills/traj-status/SKILL.md
       traj-loop:
         output: .claude/skills/traj-loop/SKILL.md
+      traj-train-optimize:
+        output: .claude/skills/traj-train-optimize/SKILL.md
+      traj-launch-training:
+        output: .claude/skills/traj-launch-training/SKILL.md
 
 settings:
   compiled_dir: compiled

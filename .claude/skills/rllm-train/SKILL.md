@@ -149,6 +149,15 @@ options:
 
 只问缺失的那一个问题，不重复问已知信息。
 
+#### 记录轨迹目录快照
+
+Phase 0 最后一步，记录当前 raw 目录下已有的 session 目录：
+```python
+import os
+existing = set(os.listdir("trajectory/output/rllm/raw/")) if os.path.exists("trajectory/output/rllm/raw/") else set()
+```
+将 `existing` 保存为变量，供 Phase 6.5 使用。
+
 ### Phase 1: 需求澄清
 
 **调用子 skill: rllm-clarify**
@@ -326,6 +335,57 @@ options:
 | 格式退化 | tool_call 使用率后期 < 前期 50% | 建议: 减少 epochs, 或增加格式辅助 reward |
 | 进程崩溃 (Traceback) | 日志含 Traceback | 读取错误信息，诊断后调整配置重试 |
 | 连续 2 轮失败 | history 中连续 2 轮 reward 未提升 | 暂停，向用户报告，建议换模型或调整任务 |
+
+## 轮次完成信号（双 CLI 模式）
+
+当 args 中包含 `round=N` 时，在 Phase 6（最终报告）完成后执行此步骤。
+
+### Phase 6.5: 写入轮次状态
+
+1. 等待 hooks 刷新（sleep 2s，确保 PostToolUse hooks 完成写入）
+2. 获取当前 session_id（快照差分法）:
+   ```bash
+   python3 -c "
+   import os
+   existing = {Phase 0 记录的快照集合}
+   current = set(os.listdir('trajectory/output/rllm/raw/')) if os.path.exists('trajectory/output/rllm/raw/') else set()
+   new_sessions = current - existing
+   if new_sessions:
+       session_id = sorted(new_sessions)[-1]
+   else:
+       session_id = 'unknown'
+   print(session_id)
+   "
+   ```
+   由于 CLI-1 每次新建，hooks 只会在 raw/ 下创建一个新目录，差集即为本次 session_id。
+3. 收集所有 run_id（从训练循环中记录的 run_id 列表）
+4. 写入轮次状态（含 session_id 和所有 run_ids）:
+   ```bash
+   python3 -c "
+   from trajectory.round_state import RoundState
+   rs = RoundState()
+   path = rs.write_training_complete(
+       round_num={N},
+       run_id='{final_run_id}',
+       reward={final_reward},
+       session_id='{session_id}',
+       run_ids={run_ids_list},
+       success=True
+   )
+   print(f'Round {N} 训练完成，状态已写入: {path}')
+   "
+   ```
+5. 输出确认: "Round {N} 训练完成。在 CLI-2 中执行 /traj-train-optimize round={N} 开始优化。"
+
+如果训练失败，改用 `write_training_failed()`。
+
+**round 参数可选。** 独立使用 /rllm-train 时不传 round，跳过此步骤。rllm-train 的 Phase 0-6 完全不变。
+
+### round 参数解析
+
+在 Phase 0 中，从 args 提取 round 参数:
+- `"round=1 | 用 qwen-0.5b 训练..."` → round=1, 训练描述="用 qwen-0.5b 训练..."
+- `"用 qwen-0.5b 训练..."` → round=None, 跳过 Phase 6.5
 
 ## 使用示例
 

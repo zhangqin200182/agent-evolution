@@ -22,11 +22,15 @@ metadata:
 读取 `trajectory/output/reports/` 下最新的分析报告（或指定的报告路径）。
 
 从报告的"优化建议"部分提取结构化建议:
-- 目标 skill
-- 目标 section
+- skill_name (目标 skill，必须属于 `skill-bank/rllm/` group)
+- target_section (目标 section)
 - action (replace/append/prepend/insert_after)
-- patch 内容
-- 优先级
+- patch_content (patch 内容)
+- priority (优先级)
+- description (描述)
+- rationale (优化理由，含轨迹证据)
+
+**Group 校验**: 如果 skill_name 不属于 `skill-bank/rllm/` group，跳过该建议并输出警告。traj-analyze-rllm 的优化目标仅限 `rllm/` group。
 
 ### 2. 生成 patch 文件
 

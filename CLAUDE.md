@@ -4,13 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an Agent RL training project that integrates rLLM concepts with HuggingFace TRL. The repo contains three directories:
+This is an Agent RL training + automatic skill optimization system. The repo has four main parts:
 
-- `rllm_trl/` — The active codebase. A self-contained agent RL training pipeline that combines rLLM's agent/environment abstractions with TRL's GRPOTrainer. Deliberately inlines minimal rllm abstractions to avoid rllm's heavy dependency chain (vllm, flash-attn, deepspeed). Runs on Mac (MPS) and CPU.
+- `rllm_trl/` — Training backend (rllm_train, to be renamed). Self-contained agent RL training pipeline combining rLLM's agent/environment abstractions with TRL's GRPOTrainer. Runs on Mac (MPS) and CPU.
+- `trajectory/` — Optimization backend (traj_opt, to be renamed). Captures Claude Code interaction trajectories via hooks, stores/segments/analyzes them, and generates skill-bank patches for automatic skill optimization.
 - `skill-bank/` — Skill management system (base + patch + compile). Contains `compile.py`, `bank.yaml`, and per-skill directories with `base.md`, `patches/`, `manifest.yaml`. Compiles to `.claude/skills/*/SKILL.md`.
-- `docs/` — Design documents: skill-bank architecture, rllm-train skill design (v1/v2).
-- `rllm/` — Upstream rLLM framework (reference only, archived). Full RL training framework for language agents using verl, vllm, deepspeed. Not directly used by rllm_trl.
-- `trl/` — Upstream TRL library (HuggingFace). Provides GRPOTrainer, SFTTrainer, and other RL trainers. Used as a dependency by rllm_trl.
+- `skill-bank/rllm/` + `skill-bank/traj/` — Two groups of Claude Code skills. rllm-xx skills orchestrate training; traj-xx skills orchestrate trajectory analysis and optimization. These are the system's entry points.
+- `docs/` — Design documents: system overview, training backend, optimization backend, skill-bank architecture, skills design.
+- `rllm/` — Upstream rLLM framework (reference only, archived). Not directly used.
+- `trl/` — Upstream TRL library (HuggingFace). Used as a dependency by rllm_trl.
 
 ## Running Training
 
@@ -64,7 +66,7 @@ python skill-bank/compile.py --diff rllm-config        # preview changes
 python skill-bank/compile.py --status                  # patch status summary
 ```
 
-Structure per skill: `skill-bank/<group>/<skill>/base.md` (with section anchors), `patches/*.md`, `manifest.yaml`. See `docs/skill-bank-design.md` for full spec.
+Structure per skill: `skill-bank/<group>/<skill>/base.md` (with section anchors), `patches/*.md`, `manifest.yaml`. See `docs/skill-bank-design.md` for full spec. See `docs/system-overview.md` for overall architecture.
 
 ## TRL Codebase Conventions
 

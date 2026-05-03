@@ -52,3 +52,14 @@ class TrajectoryWriter:
         """Write multiple trajectories."""
         for traj in trajectories:
             self.write_trajectory(traj)
+
+    def write_session_trajectories(self, session_id: str, trajectories: List[Trajectory]) -> None:
+        """Write all trajectories for a session, replacing any existing file."""
+        session_dir = self.config.trajectories_dir / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        traj_file = session_dir / "trajectories.jsonl"
+        with open(traj_file, "w", encoding="utf-8") as f:
+            for traj in trajectories:
+                line = json.dumps(traj.to_dict(), ensure_ascii=False)
+                f.write(line + "\n")

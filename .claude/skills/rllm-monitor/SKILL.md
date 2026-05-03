@@ -196,6 +196,8 @@ Monitor 检测到以下条件时，向编排层发送 STOP 建议:
 - run_1777726900 step 41-43: 所有 trajectory 使用 3 步全部调用 calculate，从不调用 finish
 - 与 step 12 不同 (step 12 正确使用了 calculate→finish 流程，只是答案错误)
 
+| Loss 持续为零 | 连续 10 步 loss=0 且 step > total_steps * 0.25 | 报告: "Loss 持续为 0，GRPO 可能未产生有效梯度。如果 reward 高，说明任务太简单；如果 reward 低，检查 num_generations 和 temperature" |
+
 ## 训练完成检测
 
 训练完成的标志：

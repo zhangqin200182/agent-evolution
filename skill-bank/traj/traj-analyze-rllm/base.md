@@ -12,7 +12,16 @@ metadata:
 # traj-analyze-rllm — rllm 训练轨迹分析
 
 <!-- section:intro -->
-你是 rllm-train 训练轨迹的分析专家。你的职责是分析最近的 rllm-xx skill 执行轨迹，发现问题模式，并生成结构化的优化建议。
+你是 rllm-train 训练轨迹的分析专家。你的职责是分析 `skill-bank/rllm/` group 下 skill 的执行轨迹，发现问题模式，并生成针对 `skill-bank/rllm/` group 下 skill 的优化建议。
+
+### 优化目标边界
+
+- **优化目标**: `skill-bank/rllm/` group 下的 skill（rllm-train、rllm-config、rllm-monitor、rllm-analyze 等）
+- **禁止优化**: `skill-bank/traj/` group 下的 skill（包括本 skill 自身）
+- 如果分析过程中发现 `traj/` group skill 的问题（如数据捕获不完整、分割逻辑缺陷），在报告的"附注"中记录，但不生成 patch
+- 所有优化建议的 skill_name 必须属于 `skill-bank/rllm/` group
+
+判断依据: `PatchGenerator._find_group(skill_name)` 返回 `"rllm"` 的 skill 才是合法的优化目标。
 <!-- /section:intro -->
 
 <!-- section:data-boundary -->
@@ -39,9 +48,9 @@ metadata:
 
 ### 上下文隔离说明
 
-本 skill 在独立 Agent 子 agent 中执行，拥有全新的对话上下文。物理上无法看到:
-- rllm-train 子 agent 中读取的 config.json 内容
-- rllm-monitor 子 agent 中 tail 的 training_log.txt 输出
+本 skill 在独立的 CLI 会话中执行（双 CLI 架构），或在 Agent 子 agent 中执行（单 CLI 兼容模式）。无论哪种方式，物理上无法看到:
+- rllm-train 执行过程中读取的 config.json 内容
+- rllm-monitor 执行过程中 tail 的 training_log.txt 输出
 - 任何 rllm-xx 执行过程中的中间状态
 
 唯一的数据来源是 trajectory/output/ 目录下的文件。
@@ -80,6 +89,15 @@ from trajectory.analyzer.base import AnalyzerBase
 from trajectory.config import DEFAULT_CONFIG
 
 analyzer = AnalyzerBase(DEFAULT_CONFIG)
+```
+
+如果指定了 `--session` 参数:
+```python
+trajectories = analyzer.get_rllm_trajectories(session_id="{session_id}")
+```
+
+如果未指定（独立使用）:
+```python
 trajectories = analyzer.get_rllm_trajectories()
 ```
 
@@ -102,7 +120,8 @@ c) 使用 Python 辅助方法简化提取:
    ```python
    from trajectory.analyzer.base import AnalyzerBase
    analyzer = AnalyzerBase(DEFAULT_CONFIG)
-   training_data_list = analyzer.get_available_training_data()
+   # 如果指定了 --session，传递 session_id 过滤
+   training_data_list = analyzer.get_available_training_data(session_id="{session_id}" if session_id else None)
    # 返回: [{trajectory_summary, training_data: {config, reward_trend, perf_stats, errors, log_snippets}}]
    ```
 

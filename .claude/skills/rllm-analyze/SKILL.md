@@ -98,6 +98,15 @@ Epoch 分析:
 
   建议: 减少 epochs/lr，或增加格式正确性辅助 reward
 
+### Loss=0 诊断
+
+当 training_log 显示 loss 全程为 0 或接近 0 时:
+
+1. 检查 reward 分布: 如果大部分 trajectory reward=1.0，说明任务太简单
+2. 检查 num_generations: GRPO 需要足够的 generation 数来估计 baseline
+3. 检查 temperature: 太低的 temperature 导致所有 generation 相似，variance 不足
+4. 结论: loss=0 + high reward = 任务太简单; loss=0 + low reward = GRPO 配置问题
+
 ### 二、性能分析
 
 从 perf_stats.json 中提取：

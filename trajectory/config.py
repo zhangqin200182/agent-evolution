@@ -40,5 +40,9 @@ class TrajectoryConfig:
     def agent_progress_dir(self) -> Path:
         return Path(self.output_dir) / "agent_progress"
 
+    @property
+    def rounds_dir(self) -> Path:
+        return Path(self.output_dir) / "rounds"
+
 
 DEFAULT_CONFIG = TrajectoryConfig()

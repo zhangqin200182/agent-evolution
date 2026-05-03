@@ -50,7 +50,7 @@ from trajectory.store.writer import TrajectoryWriter
 from trajectory.store.index import IndexManager
 
 writer = TrajectoryWriter(DEFAULT_CONFIG)
-writer.write_trajectories(trajectories)
+writer.write_session_trajectories(session_id, trajectories)
 
 index = IndexManager(DEFAULT_CONFIG)
 index.update_session(session_id, trajectories)
