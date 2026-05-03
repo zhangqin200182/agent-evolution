@@ -387,6 +387,29 @@ existing = set(os.listdir("traj_opt/output/rllm/raw/")) if os.path.exists("traj_
 - `"round=1 | 用 qwen-0.5b 训练..."` → round=1, 训练描述="用 qwen-0.5b 训练..."
 - `"用 qwen-0.5b 训练..."` → round=None, 跳过 Phase 6.5
 
+### session_id 快照差分法改进
+
+Phase 0 记录快照时，先确保目录存在:
+```python
+import os
+raw_dir = "traj_opt/output/rllm/raw/"
+os.makedirs(raw_dir, exist_ok=True)
+existing = set(os.listdir(raw_dir))
+```
+
+Phase 6.5 差分时，增加容错:
+```python
+current = set(os.listdir(raw_dir)) if os.path.exists(raw_dir) else set()
+new_sessions = current - existing
+if new_sessions:
+    session_id = sorted(new_sessions)[-1]
+else:
+    # fallback: 使用最近修改的目录
+    import pathlib
+    dirs = sorted(pathlib.Path(raw_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    session_id = dirs[0].name if dirs else "unknown"
+```
+
 ## 使用示例
 
 ```

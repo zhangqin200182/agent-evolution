@@ -229,6 +229,18 @@ difficulty 参数扩展:
 | loss=0 全程 + reward >= 0.8 | difficulty 提升一级 (simple→mixed, mixed→hard) | 题目太简单，模型预训练能力已覆盖，GRPO 无学习信号 |
 | loss=0 全程 + reward < 0.5 | 检查 num_generations 和 temperature | reward variance 不足，GRPO baseline 估计有问题 |
 
+### 题目难度自动升级
+
+当调参输入满足以下条件时，优先建议提高难度而非调整超参数:
+- avg_reward >= 0.8 且 loss 接近 0
+- difficulty 当前为 simple 或 mixed
+
+诊断逻辑:
+  if reward >= 0.8 and loss ≈ 0:
+      if difficulty == "simple": → 建议切换到 mixed
+      if difficulty == "mixed": → 建议增加 num_problems 或切换到 hard
+      不要调 lr/epochs/batch 等超参数，问题不在训练动态而在数据难度
+
 ## 配置预检（生成配置后、启动前执行）
 
 ### 必检项（不通过则拒绝启动）

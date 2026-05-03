@@ -229,3 +229,10 @@ Hooks 只捕获 Claude Code 工具调用的 input/response。Monitor 工具的 g
 | 训练结束时 | tail training_log.txt 最后 50 行 | Bash | 最终 Training Report |
 
 这些 Read/Bash 调用是 Monitor grep 的必要补充，不是替代。Monitor 负责实时通知，Read/Bash 负责将完整数据带入对话供 hooks 捕获。
+
+### 定期 Tail 检查频率
+
+除 Monitor 实时流式监控外，增加定期 tail 检查:
+- 每 2 分钟或每 10 步（以先到者为准）执行一次 `tail -30 training_log.txt`
+- 这确保训练数据通过 Read/Bash 工具被 hooks 捕获到轨迹中
+- Monitor 的 grep 输出不被 PostToolUse hook 记录，因此 tail 检查是数据表面化的关键补充

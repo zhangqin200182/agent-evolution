@@ -1,0 +1,34 @@
+active:
+- 001-model-safety
+- 002-param-constraints
+- 003-difficulty
+- 004-pre-check
+- traj-20260501-155627-param-ranges
+- traj-20260502-001000-problem-count
+- traj-20260502-202806-difficulty-scaling
+- traj-20260502-202806-seed-strategy
+- traj-20260502-202806-problem-count-update
+- traj-20260502-213850-problem-count-refine
+- traj-20260502-152342-param-ranges
+- traj-20260503-091930-param-ranges
+- traj-20260503-094219-param-ranges
+base: base.md
+disabled:
+- traj-20260502-213850-late-forgetting-tuning
+profiles:
+  large-model:
+    active:
+    - 002-param-constraints
+    - 003-difficulty
+    - 004-pre-check
+    description: 3B 模型的宽松配置
+    disabled:
+    - 001-model-safety
+  small-model:
+    active:
+    - 001-model-safety
+    - 002-param-constraints
+    - 003-difficulty
+    - 004-pre-check
+    description: 0.5B 模型的保守配置
+    disabled: []

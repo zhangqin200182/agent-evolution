@@ -76,15 +76,17 @@ mkdir -p traj_opt/output/rounds/round_{N}
 
 #### 交互式（默认）
 
-获取当前项目目录，用 osascript 打开新 Terminal 窗口:
+用 osascript 打开新 Terminal 窗口，通过 heredoc 避免引号嵌套问题:
 ```bash
 PROJECT_DIR=$(pwd)
-osascript -e "
-tell application \"Terminal\"
+osascript << ENDSCRIPT
+tell application "Terminal"
     activate
-    do script \"cd $PROJECT_DIR && claude \\\"/rllm-train round={N} | {描述}\\\"\"
+    set projectDir to "$PROJECT_DIR"
+    set trainCmd to "claude \"/rllm-train round={N} | {描述}\""
+    do script "cd " & projectDir & " && " & trainCmd
 end tell
-"
+ENDSCRIPT
 ```
 
 #### 非交互式（--auto）
