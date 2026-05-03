@@ -54,6 +54,61 @@ The response mask system (1=model tokens, 0=env tokens) is central to correct GR
 
 The rollout function handles asyncio event loop edge cases (running loop detection, thread pool fallback) because TRL's training loop may already have an active event loop.
 
+## traj_opt Architecture
+
+The optimization pipeline flows: `hooks/` capture → `adapter/` convert → `store/` persist → `segmenter/` split → `analyzer/` extract → `optimizer/` patch.
+
+Core intelligence lives in traj-xx skills' SKILL.md (analysis strategies, domain knowledge). Python code provides infrastructure only, so analysis strategies iterate via skill-bank patches without changing Python code.
+
+Key modules and their roles:
+
+- `hooks/post_tool.py` — PostToolUse hook. Reads stdin JSON from Claude Code, converts via HooksAdapter, appends to events.jsonl. Must complete within 1 second, fails silently.
+- `hooks/on_stop.py` — Stop/SubagentStop hook. Records turn_end and conversation_end events.
+- `adapter/hooks_adapter.py` — `HooksAdapter` converts Claude Code Hooks JSON → `TrajectoryEvent`. The only schema coupling point — when Hooks format changes, only this file needs updating.
+- `adapter/schema.py` — Internal data models: `TrajectoryEvent`, `Trajectory`, `SkillOptimizationSuggestion`.
+- `store/writer.py` — Appends events to JSONL files under `traj_opt/output/rllm/raw/{session_id}/`.
+- `store/reader.py` — `EventReader` reads session events and trajectories. Supports session_id filtering.
+- `store/index.py` — `IndexManager` maintains `traj_opt/output/index.jsonl` for cross-session lookups.
+- `segmenter/skill_segmenter.py` — Anchors on `tool_name == "Skill"` calls, collects subsequent tool calls until next Skill call or turn boundary.
+- `segmenter/free_segmenter.py` — Handles events not covered by Skill Segmenter. Splits by turn boundary, groups by file affinity.
+- `segmenter/registry.py` — `SegmenterRegistry` chains Skill Segmenter first, then Free Segmenter on remaining events.
+- `analyzer/base.py` — `AnalyzerBase` provides `get_rllm_trajectories()`, `get_available_training_data()`, `summarize_trajectory()`.
+- `analyzer/report.py` — `ReportWriter` saves analysis reports to `traj_opt/output/rllm/reports/`.
+- `optimizer/patch_generator.py` — `PatchGenerator` generates skill-bank patches with three validations: `_validate_target_group` (only rllm/ group), `_validate_target_section`, `_activate_patch`.
+- `optimizer/compiler_bridge.py` — `CompilerBridge` calls `skill-bank/compile.py` to compile skills.
+- `round_state.py` — `RoundState` reads/writes `traj_opt/output/rounds/round_{n}/status.json` for dual CLI coordination.
+- `config.py` — `TrajectoryConfig` with defaults (output_dir, capture settings, analysis lookback).
+
+## Dual CLI Architecture
+
+Training and optimization run in two independent Claude Code processes, coordinated via filesystem:
+
+- CLI-1 (Terminal 1): Executes rllm-xx skills, produces training results and trajectories via hooks
+- CLI-2 (Terminal 2): Executes traj-xx skills, analyzes trajectories, generates skill-bank patches
+- Coordination: `traj_opt/output/rounds/round_{n}/status.json` tracks state (`training_complete` → `optimization_complete`)
+- Isolation: CLI-2 only reads from `traj_opt/output/`, never from `rllm_train/output/`
+
+Typical workflow in CLI-2:
+```bash
+/traj-launch-training round=1 | 用 qwen-0.5b 训练, reward >= 0.8
+# → opens new Terminal with CLI-1, user trains interactively
+/traj-train-optimize round=1
+# → segment → analyze → generate patches → confirm → compile
+```
+
+## Trajectory Data Layout
+
+```
+traj_opt/output/
+├── rllm/                          # Layer 1 trajectories
+│   ├── raw/{session_id}/events.jsonl
+│   ├── trajectories/{session_id}/trajectories.jsonl
+│   └── reports/
+├── rounds/                        # Dual CLI coordination
+│   └── round_{n}/status.json
+└── index.jsonl                    # Global index
+```
+
 ## Skill Bank
 
 Skills are managed via `skill-bank/` using a base + patch + compile architecture. Do not edit `.claude/skills/*/SKILL.md` directly — edit the base or add patches, then compile.
