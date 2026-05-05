@@ -35,11 +35,13 @@ metadata:
 
 从用户输入中提取:
 - round 号（必需，或 "latest" 自动查找最新待优化轮次）
+- `--auto-approve[=LEVEL]` flag（可选，透传给 traj-optimize）
 
 示例输入:
 ```
 /traj-train-optimize round=1
-/traj-train-optimize latest
+/traj-train-optimize round=1 --auto-approve=high
+/traj-train-optimize latest --auto-approve
 ```
 
 如果参数为 "latest":
@@ -51,6 +53,12 @@ if round_num is None:
     输出 "没有待优化的轮次。请先在 CLI-1 中执行 /rllm-train。"
     退出
 ```
+
+解析 `--auto-approve`:
+- 无此参数: `auto_approve = None`
+- `--auto-approve` 或 `--auto-approve=medium`: `auto_approve = "medium"`
+- `--auto-approve=high`: `auto_approve = "high"`
+- `--auto-approve=all`: `auto_approve = "all"`
 
 ### 1. 读取轮次状态
 
@@ -112,9 +120,16 @@ event_count = len(events)
 
 ### 5. 生成 Patch
 
-调用 Skill("traj-optimize", args="{report_path}")
+构造 traj-optimize 参数:
+```python
+args = f"{report_path}"
+if auto_approve:
+    args += f" --auto-approve={auto_approve}"
+```
 
-等待用户确认 patch 并编译。
+调用 Skill("traj-optimize", args=args)
+
+等待 patch 确认（人工或自动）并编译。
 
 ### 6. 更新轮次状态
 

@@ -198,6 +198,16 @@ Monitor 检测到以下条件时，向编排层发送 STOP 建议:
 
 | Loss 持续为零 | 连续 10 步 loss=0 且 step > total_steps * 0.25 | 报告: "Loss 持续为 0，GRPO 可能未产生有效梯度。如果 reward 高，说明任务太简单；如果 reward 低，检查 num_generations 和 temperature" |
 
+### 步时异常检测
+
+当 avg_step_time 显著偏离预期时发出警告:
+- 如果有历史数据: avg_step_time > 历史均值 * 2 → 警告
+- 如果无历史数据: avg_step_time > 60s（0.5B 模型）→ 警告
+
+警告内容: "当前 avg_step_time={X}s，显著高于预期。可能原因: 系统资源竞争、MPS 性能退化、后台进程干扰。"
+
+注: 此检测基于 Round 3 单轮数据（35m vs 历史 7-10m），置信度低，需更多数据验证。
+
 ## 训练完成检测
 
 训练完成的标志：

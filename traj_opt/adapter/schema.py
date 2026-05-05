@@ -290,6 +290,8 @@ class SkillOptimizationSuggestion:
     rationale: str
     priority: str
     patch_content: str
+    confidence: str = "medium"
+    evidence_rounds: int = 0
     source_sessions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -301,5 +303,7 @@ class SkillOptimizationSuggestion:
             "rationale": self.rationale,
             "priority": self.priority,
             "patch_content": self.patch_content,
+            "confidence": self.confidence,
+            "evidence_rounds": self.evidence_rounds,
             "source_sessions": self.source_sessions,
         }

@@ -1,22 +1,21 @@
 ---
-description: End-to-end automated agent RL training with rllm_train. Orchestrates
-  requirement clarification, config generation, training execution, monitoring, result
-  analysis, and iterative hyperparameter tuning until training goals are met. Supports
-  auto and approve execution modes.
-metadata:
-  categories:
-  - machine-learning
-  - agent-training
-  - automation
-  version: 2.0.0
 name: rllm-train
+description: End-to-end automated agent RL training with rllm_train. Orchestrates requirement clarification, config generation, training execution, monitoring, result analysis, and iterative hyperparameter tuning until training goals are met. Supports auto and approve execution modes.
+metadata:
+  version: "2.0.0"
+  categories:
+    - machine-learning
+    - agent-training
+    - automation
 ---
-
 
 # rllm-train — 自动训练主编排
 
+<!-- section:intro -->
 你是 rllm_train agent RL 训练的全流程编排者。你负责串联需求澄清、配置生成、训练执行、过程监控、结果分析、调参优化的完整闭环，循环直到训练目标达成。
+<!-- /section:intro -->
 
+<!-- section:rules -->
 ## 执行规则（必须遵守）
 
 1. **每个 Phase 必须通过调用对应的子 skill 来执行**，不得跳过子 skill 直接执行其内部逻辑
@@ -26,7 +25,9 @@ name: rllm-train
 5. **Skill 调用后立即停止** — 调用 `Skill("rllm-xxx")` 后，当轮响应必须立即结束，不得在同一轮响应中跟随任何 Bash、Read、Write、Edit 等工具调用。原因: Skill 工具是异步的，系统会在下一轮消息中注入 SKILL.md 内容，只有等到注入完成后才能按 SKILL.md 的步骤执行。如果在同一轮就开始执行操作，等于绕过了 skill 的注入流程，违反了规则 1 和 4
 6. **Phase 间不跳步** — 即使上一轮的 analysis.json 已经给出了明确的调参建议，调参循环仍必须经过 Phase 2 (rllm-config) → Phase 3 (rllm-run) → Phase 4 (rllm-monitor) → Phase 5 (rllm-analyze) 的完整流程。禁止在编排层直接修改 config.json 或跳过 monitor 直接读日志。
 7. **调参循环中的 Phase 4 不可省略** — 每次 rllm-run 启动训练后，必须调用 rllm-monitor 监控。不得因为"上一轮已经知道训练模式"而跳过监控。Monitor 负责异常检测和 early stopping，跳过会导致 catastrophic forgetting 无法被及时发现。
+<!-- /section:rules -->
 
+<!-- section:skill-invocation -->
 ## 子 skill 调用方式
 
 每个 Phase 调用子 skill 时，按以下优先级执行：
@@ -36,7 +37,9 @@ name: rllm-train
    - 用 Read 工具读取 `.claude/skills/rllm-xxx/SKILL.md`
    - 严格按照 SKILL.md 中描述的步骤逐步执行
    - 不得省略、合并或跳过 SKILL.md 中的任何步骤
+<!-- /section:skill-invocation -->
 
+<!-- section:data-contract -->
 ## 数据传递契约
 
 Phase 之间通过以下方式传递数据：
@@ -53,7 +56,9 @@ Phase 5 → Phase 2（循环）: analysis.json 路径 (rllm_train/output/runs/<r
 ## 工作目录
 
 `/Users/kevin/code/MyProject`
+<!-- /section:data-contract -->
 
+<!-- section:flow-overview -->
 ## 整体流程
 
 ```
@@ -71,7 +76,9 @@ Phase 3-5: 训练循环
     ↓
 Phase 6: 最终报告 (编排者自己执行)
 ```
+<!-- /section:flow-overview -->
 
+<!-- section:execution-modes -->
 ## 执行模式
 
 ### approve 模式（默认）
@@ -93,7 +100,9 @@ Phase 6: 最终报告 (编排者自己执行)
 - "auto 模式" / "全自动" / "自动执行" → auto
 - "approve 模式" / "人工确认" / "每步确认" → approve
 - 未指定 → 默认 approve
+<!-- /section:execution-modes -->
 
+<!-- section:phase0 -->
 ## 详细执行步骤
 
 ### Phase 0: 输入分级与引导（编排者自己执行）
@@ -159,7 +168,9 @@ import os
 existing = set(os.listdir("traj_opt/output/rllm/raw/")) if os.path.exists("traj_opt/output/rllm/raw/") else set()
 ```
 将 `existing` 保存为变量，供 Phase 6.5 使用。
+<!-- /section:phase0 -->
 
+<!-- section:phase1-5 -->
 ### Phase 1: 需求澄清
 
 **调用子 skill: rllm-clarify**
@@ -276,39 +287,9 @@ RoundState().write_heartbeat(round_num, new_run_id, phase="tuning",
 ```
 
 heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 status.json 同目录。CLI-2 通过文件 mtime 变化检测活跃度，实现自适应超时。
+<!-- /section:phase1-5 -->
 
-### Phase 4.5: 训练中止（新增）
-
-触发条件 (任一):
-  - Monitor 发出 STOP 建议 (early stopping)
-  - 用户主动要求停止
-  - 训练进程崩溃 (OOM, Traceback)
-
-执行步骤:
-  1. TaskStop 训练后台任务
-  2. TaskStop Monitor 任务
-  3. 等待 5s 确认进程退出
-  4. 读取已生成的 trajectory 文件和日志
-  5. 进入 Phase 5 分析（即使训练未完成，也分析已有数据）
-
-中止后的分析要点:
-  - 标记 analysis.json 中 `"completed": false, "abort_reason": "..."`
-  - 分析崩溃前的 reward 趋势
-  - 如果是 early stopping: 诊断崩溃原因并给出针对性调参建议
-  - 如果是用户中止: 保存状态，支持后续恢复
-
-### 训练机制说明
-
-每轮训练都从 base model (如 Qwen2.5-0.5B-Instruct) 重新加载权重。
-上一轮的训练结果不会影响下一轮的初始权重。
-调参循环改变的是训练配置（lr, epochs, difficulty 等），不是模型起点。
-
-在 Phase 3 启动训练时提示:
-  "第 N 轮训练: 从 base model 重新开始 (不继承上一轮权重)"
-
-在 Phase 6 最终报告中说明:
-  "每轮训练独立从 base model 开始，最终模型来自第 N 轮的训练结果"
-
+<!-- section:phase6 -->
 ### Phase 6: 最终报告（编排者自己执行）
 
 训练目标达成（或达到停止条件）后，输出最终报告：
@@ -328,7 +309,9 @@ heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 st
 最终模型:   rllm_train/output/runs/<run_id>/final_model/
 所有记录:   rllm_train/output/runs/<run_id>/
 ```
+<!-- /section:phase6 -->
 
+<!-- section:stop-conditions -->
 ## 停止条件判断
 
 每轮训练结束后（Phase 5 完成后），编排者检查以下条件（按优先级）：
@@ -338,7 +321,9 @@ heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 st
 3. **max_wall_time**: 总耗时超限 → 停止（可能未达标）
 4. **plateau_rounds**: 连续 N 轮 reward 提升 < 5% → 停止（plateau）
 5. **reward 下降**: 连续 2 轮 reward 下降 → 警告，建议停止
+<!-- /section:stop-conditions -->
 
+<!-- section:state-tracking -->
 ## 状态追踪
 
 在训练循环中维护以下状态（编排者自己管理）：
@@ -357,20 +342,20 @@ heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 st
 ```
 
 将状态写入 `rllm_train/output/training_state.json`，以便中断后恢复。
+<!-- /section:state-tracking -->
 
-## 错误恢复策略（修订）
+<!-- section:error-recovery -->
+## 错误恢复
 
-| 场景 | 检测方式 | 恢复策略 |
-|------|---------|---------|
-| OOM | "out of memory" | 自动: max_completion_length ÷2, 如仍 OOM 则 num_problems ÷2 |
-| num_generations 不整除 | ValueError 启动失败 | 自动: 调整 num_generations 为最近合法值 |
-| lr 过高致策略崩溃 | reward 从 >0 骤降到 0 且不恢复 | 自动: lr ÷2, 重新训练 |
-| catastrophic forgetting | Epoch N+1 reward < Epoch N * 0.3 | 自动: epochs 设为当前 epoch 数 -1, 重新训练 |
-| grad_accum 副作用 | 训练从第 1 步就 reward=0 | 建议: 回退 grad_accum 到上一轮值 |
-| 格式退化 | tool_call 使用率后期 < 前期 50% | 建议: 减少 epochs, 或增加格式辅助 reward |
-| 进程崩溃 (Traceback) | 日志含 Traceback | 读取错误信息，诊断后调整配置重试 |
-| 连续 2 轮失败 | history 中连续 2 轮 reward 未提升 | 暂停，向用户报告，建议换模型或调整任务 |
+| 场景 | 处理 |
+|---|---|
+| 训练进程崩溃 | 读取错误日志，诊断原因，调整配置后重试 |
+| OOM | 自动减小 batch_size 和 num_generations，重新调用 rllm-config |
+| 连续 2 轮失败 | 暂停，向用户报告问题，等待指示 |
+| 用户中断 | 保存当前状态到 training_state.json，下次可从中断点恢复 |
+<!-- /section:error-recovery -->
 
+<!-- section:round-signal -->
 ## 轮次完成信号（双 CLI 模式）
 
 当 args 中包含 `round=N` 时，在 Phase 6（最终报告）完成后执行此步骤。
@@ -422,30 +407,9 @@ heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 st
 - `"round=1 -- 用 qwen-0.5b 训练..."` → round=1, 训练描述="用 qwen-0.5b 训练..."
 - `"round=1 | 用 qwen-0.5b 训练..."` → 同上（兼容旧格式，但新代码应使用 `--`）
 - `"用 qwen-0.5b 训练..."` → round=None, 跳过 Phase 6.5
+<!-- /section:round-signal -->
 
-### session_id 快照差分法改进
-
-Phase 0 记录快照时，先确保目录存在:
-```python
-import os
-raw_dir = "traj_opt/output/rllm/raw/"
-os.makedirs(raw_dir, exist_ok=True)
-existing = set(os.listdir(raw_dir))
-```
-
-Phase 6.5 差分时，增加容错:
-```python
-current = set(os.listdir(raw_dir)) if os.path.exists(raw_dir) else set()
-new_sessions = current - existing
-if new_sessions:
-    session_id = sorted(new_sessions)[-1]
-else:
-    # fallback: 使用最近修改的目录
-    import pathlib
-    dirs = sorted(pathlib.Path(raw_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
-    session_id = dirs[0].name if dirs else "unknown"
-```
-
+<!-- section:examples -->
 ## 使用示例
 
 ```
@@ -456,3 +420,4 @@ else:
 /rllm-train auto 模式，快速测试，16 个问题，reward >= 0.5
 /rllm-train qwen-1.5b, 200 problems, 5 epochs, max 3 rounds
 ```
+<!-- /section:examples -->

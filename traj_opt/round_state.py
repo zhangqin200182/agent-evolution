@@ -166,6 +166,38 @@ class RoundState:
             return latest + 1
         return None
 
+    def write_heartbeat(
+        self,
+        round_num: int,
+        run_id: str,
+        phase: str,
+        step: Optional[str] = None,
+        reward: Optional[float] = None,
+        message: Optional[str] = None,
+    ) -> None:
+        """CLI-1: write heartbeat during training. Called by rllm-train orchestration."""
+        path = self.base_dir / f"round_{round_num}" / "heartbeat.json"
+        data = {
+            "run_id": run_id,
+            "phase": phase,
+            "step": step,
+            "reward": reward,
+            "message": message,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._atomic_write(path, data)
+
+    def read_heartbeat(self, round_num: int) -> Optional[Dict[str, Any]]:
+        """CLI-2: read heartbeat to monitor training progress."""
+        path = self.base_dir / f"round_{round_num}" / "heartbeat.json"
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
     def list_rounds(self) -> List[Dict[str, Any]]:
         """List all rounds with their status. For display purposes."""
         if not self.base_dir.exists():

@@ -12,6 +12,12 @@ active:
 - traj-20260502-152342-param-ranges
 - traj-20260503-091930-param-ranges
 - traj-20260503-094219-param-ranges
+- traj-20260503-164307-param-ranges
+- traj-20260503-164321-param-ranges
+- traj-20260504-145253-param-ranges
+- traj-20260504-151735-initial-config
+- traj-20260504-151735-param-ranges
+- traj-20260504-161626-param-ranges
 base: base.md
 disabled:
 - traj-20260502-213850-late-forgetting-tuning

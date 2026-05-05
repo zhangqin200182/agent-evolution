@@ -86,7 +86,12 @@ class AnalyzerBase:
         }
 
     def extract_training_data(self, traj: Trajectory) -> Dict[str, Any]:
-        """Extract training data surfaced by rllm-monitor/rllm-analyze via tool calls."""
+        """Extract training data surfaced by rllm-monitor/rllm-analyze via tool calls.
+
+        Handles the actual tool_response dict structures:
+        - Read: {"type": "text", "file": {"filePath": ..., "content": ...}}
+        - Bash: {"stdout": ..., "stderr": ..., ...}
+        """
         result: Dict[str, Any] = {
             "config": None,
             "reward_trend": None,
@@ -96,39 +101,52 @@ class AnalyzerBase:
         }
 
         for tc in traj.tool_calls:
-            if tc.tool_name == "Read" and tc.tool_response:
+            resp = tc.tool_response
+            if not resp:
+                continue
+
+            if tc.tool_name == "Read" and isinstance(resp, dict):
                 file_path = tc.tool_input.get("file_path", "")
-                response_text = str(tc.tool_response)
+                content = self._extract_read_content(resp)
+                if not content:
+                    continue
 
                 if "config.json" in file_path:
                     try:
-                        result["config"] = json.loads(response_text)
+                        result["config"] = json.loads(content)
                     except (json.JSONDecodeError, TypeError):
-                        result["config"] = {"raw": response_text[:2000]}
+                        result["config"] = {"raw": content[:2000]}
 
                 elif "perf_stats.json" in file_path:
                     try:
-                        result["perf_stats"] = json.loads(response_text)
+                        result["perf_stats"] = json.loads(content)
                     except (json.JSONDecodeError, TypeError):
-                        result["perf_stats"] = {"raw": response_text[:2000]}
+                        result["perf_stats"] = {"raw": content[:2000]}
 
-            elif tc.tool_name == "Bash" and tc.tool_response:
+            elif tc.tool_name == "Bash" and isinstance(resp, dict):
                 command = tc.tool_input.get("command", "")
-                response_text = str(tc.tool_response)
+                stdout = resp.get("stdout", "")
 
-                if "training_log" in command or "tail" in command:
-                    result["log_snippets"].append(response_text[:3000])
-                    rewards = self._extract_rewards_from_log(response_text)
+                if ("training_log" in command or "tail" in command) and stdout:
+                    result["log_snippets"].append(stdout[:3000])
+                    rewards = self._extract_rewards_from_log(stdout)
                     if rewards:
                         result["reward_trend"] = rewards
 
-                if "Error" in response_text or "Traceback" in response_text:
+                if stdout and ("Error" in stdout or "Traceback" in stdout):
                     result["errors"].append({
                         "command": command,
-                        "error": response_text[:2000],
+                        "error": stdout[:2000],
                     })
 
         return result
+
+    @staticmethod
+    def _extract_read_content(resp: Dict[str, Any]) -> Optional[str]:
+        """Extract file content from Read tool response dict."""
+        if resp.get("type") == "text" and "file" in resp:
+            return resp["file"].get("content")
+        return None
 
     def get_available_training_data(self, days: Optional[int] = None, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all rllm trajectories with extracted training data."""

@@ -63,6 +63,8 @@ class PatchGenerator:
             f"action: {suggestion.action}",
             f"description: {desc}",
             f"status: proposed",
+            f"confidence: {suggestion.confidence}",
+            f"evidence_rounds: {suggestion.evidence_rounds}",
             f"source: trajectory-analysis",
             f"source_sessions: {json.dumps(suggestion.source_sessions)}",
             "---",

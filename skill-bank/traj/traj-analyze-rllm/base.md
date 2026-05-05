@@ -35,6 +35,7 @@ metadata:
 | `traj_opt/output/trajectories/{session_id}/trajectories.jsonl` | 分割后轨迹 | 主要分析输入 |
 | `traj_opt/output/reports/` | 历史分析报告 | 跨轮次对比 |
 | `traj_opt/output/index.jsonl` | 全局索引 | 查找相关 session |
+| `skill-bank/rllm/*/base.md` | skill section 结构 | 验证 patch 目标 section 名是否存在 |
 
 ### 禁止直接读取的数据源
 
@@ -43,7 +44,6 @@ metadata:
 | `rllm_train/output/runs/*/` | 属于 rllm-xx，只能通过轨迹间接获取 |
 | `rllm_train/config.py` | 属于 rllm-xx 内部实现 |
 | `rllm_train/*.py` | 属于 rllm-xx 内部实现 |
-| `skill-bank/rllm/*/base.md` | 属于 rllm-xx skill 源码 |
 | `.claude/skills/rllm-*/SKILL.md` | 属于 rllm-xx 编译产物 |
 
 ### 上下文隔离说明
@@ -54,6 +54,8 @@ metadata:
 - 任何 rllm-xx 执行过程中的中间状态
 
 唯一的数据来源是 traj_opt/output/ 目录下的文件。
+
+例外: 允许读取 skill-bank/rllm/*/base.md 中的 section 锚点（`<!-- section:xxx -->`），用于验证优化建议的 target_section 是否存在。禁止读取 section 内容用于分析（分析数据仍然只来自轨迹）。
 <!-- /section:data-boundary -->
 
 <!-- section:analysis-framework -->
@@ -122,7 +124,8 @@ c) 使用 Python 辅助方法简化提取:
    analyzer = AnalyzerBase(DEFAULT_CONFIG)
    # 如果指定了 --session，传递 session_id 过滤
    training_data_list = analyzer.get_available_training_data(session_id="{session_id}" if session_id else None)
-   # 返回: [{trajectory_summary, training_data: {config, reward_trend, perf_stats, errors, log_snippets}}]
+   # 返回: [{session_id, skill_name, start_time, end_time, tool_count, ..., training_data: {config, reward_trend, perf_stats, errors, log_snippets}}]
+   # 注意: 返回的是 flat dict（summary 字段 + training_data），不是嵌套在 trajectory_summary 下
    ```
 
 d) 如果轨迹数据为空或 tool_response 中缺少关键信息:
@@ -159,19 +162,45 @@ rllm-train 轨迹: {count} 条
 ### 1. {问题标题} [影响: {target_skill}]
 **现象**: ...
 **证据**: ...
+**分析（{置信度}置信度）**: ...
 **建议**: ...
 
 ## 优化建议
 
-| 优先级 | 目标 Skill | Section | Action | 描述 |
-|--------|-----------|---------|--------|------|
-| ... | ... | ... | ... | ... |
+| 优先级 | 置信度 | 证据轮次 | 目标 Skill | Section | Action | 描述 |
+|--------|--------|---------|-----------|---------|--------|------|
+| ... | ... | ... | ... | ... | ... | ... |
 
 ## 建议的 Patch 内容
 
 ### Patch 1: {description}
 (完整 patch markdown 内容)
 ```
+
+### 置信度判定规则
+
+每条优化建议必须标注置信度:
+- **高 (high)**: 基于 3+ 轮轨迹的一致模式，可安全自动接受
+- **中 (medium)**: 基于 1-2 轮轨迹数据，有依据但样本不足
+- **低 (low)**: 推测性解释，需要更多数据验证
+
+evidence_rounds 填写支撑该建议的实际轨迹轮次数。
+
+### 4.5 验证优化建议的 target_section
+
+对每条优化建议，验证 target_section 在目标 skill 的 base.md 中存在:
+
+```bash
+grep -c "<!-- section:{target_section} -->" skill-bank/rllm/{skill_name}/base.md
+```
+
+- 如果匹配数 > 0: section 存在，保留建议
+- 如果匹配数 = 0: section 不存在，尝试模糊匹配:
+  ```bash
+  grep -o '<!-- section:[a-z0-9-]* -->' skill-bank/rllm/{skill_name}/base.md
+  ```
+  从匹配结果中选择最接近的 section 名，更新建议的 target_section。
+  如果无法确定，在报告中标注 "[section 名待确认]"。
 
 ### 5. 保存报告
 

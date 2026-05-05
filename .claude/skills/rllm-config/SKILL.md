@@ -63,6 +63,18 @@ difficulty 参数控制训练数据的难度分布:
 - reward<0.1 + difficulty=hard → 太难，切换到 mixed
 - mixed 下 reward 在 0.3-0.7 → 比例合适，保持不变
 
+### Seed 随机化
+
+当调参循环生成新配置时，如果核心超参（lr, epochs, num_problems, difficulty, num_generations, batch_size）与上一轮完全相同，自动更换 seed:
+
+```python
+import time
+if config_unchanged_from_previous:
+    config.seed = int(time.time()) % 100000
+```
+
+这确保即使配置相同，每轮训练也使用不同的训练数据排列，产生独立的 reward 数据点。
+
 ## 模式二：调参优化
 
 根据 rllm-analyze 阶段的分析结果，调整配置参数。
@@ -121,125 +133,17 @@ difficulty 参数控制训练数据的难度分布:
 difficulty 参数扩展:
 - `"mixed-hard"`: 50% simple + 50% hard（新增，介于 mixed 和 hard 之间）
 
-### 参数安全范围
-
-#### 模型级别安全配置（硬约束）
-
-生成配置时，必须根据模型大小查表，参数不得超出对应上限。
-
-| 参数 | 0.5B 上限 | 1.5B 上限 | 3B 上限 | 依据 |
-|------|----------|----------|--------|------|
-| learning_rate | 1e-5 | 2e-5 | 5e-5 | 0.5B 在 2e-5 时策略崩溃 |
-| num_epochs | 2 | 4 | 6 | 0.5B 在 4ep 时 catastrophic forgetting |
-| max_completion_length | 256 | 512 | 512 | MPS 显存限制 |
-| num_problems (MPS) | 32 | 32 | 16 | 配合 num_generations=4 的显存上限 |
-
-调参建议超出上限时，必须警告并拒绝。例如：
-  建议 num_epochs: 2 → 4
-  → 检查: 0.5B 模型 epochs 上限为 2
-  → 拒绝，改为建议: 增加 num_problems 或换 1.5B 模型
-
-#### 通用参数范围
-
-| 参数 | 最小值 | 最大值 | 说明 |
-|---|---|---|---|
-| learning_rate | 1e-7 | 1e-3 | 超出范围大概率不收敛 |
-| temperature | 0.3 | 1.5 | 太低无探索，太高太随机 |
-| num_generations | 2 | 8 | GRPO 至少需要 2 |
-| batch_size | 1 | 4 | Mac 内存限制 |
-| num_problems | 8 | 512 | 太少不够学，太多太慢 |
-| num_epochs | 1 | 20 | 过多可能过拟合 |
-| max_agent_steps | 1 | 8 | 影响生成长度和速度 |
-| gradient_accumulation_steps | 1 | 16 | 等效增大 batch |
-
-当 num_problems >= 64 时，0.5B 模型的安全范围收紧:
+当 difficulty=mixed 时，0.5B 模型的 num_problems 安全上限:
 
 | 参数 | 原上限 | 新上限 | 条件 | 依据 |
 |------|--------|--------|------|------|
-| learning_rate | 1e-5 | 5e-6 | num_problems >= 64 | lr=1e-5 在 64 problems 时导致 catastrophic forgetting |
-| num_epochs | 2 | 1 | num_problems >= 64 | 2 epochs 在 Step 8/128 时 reward 已开始崩溃 |
-
-推荐初始配置 (0.5B + 64 problems):
-- lr=5e-6, epochs=1, batch=2, generations=4
-- 预期: reward 稳定在 0.5-0.8 范围，不会崩溃
-
-当 difficulty=mixed 时，0.5B 模型的 num_problems 安全上限进一步收紧:
-
-| 参数 | 原上限 | 新上限 | 条件 | 依据 |
-|------|--------|--------|------|------|
-| num_problems | 64 | 32 | difficulty=mixed 且 model=0.5B | lr=5e-6 + 1 epoch + 64 problems 仍在 step 9 开始 forgetting |
+| num_problems | 32 | 40 | difficulty=mixed 且 model=0.5B 且 lr<=5e-6 且 epochs<=1 | Round 1-3: 40p 稳定 (reward 0.86-1.0), 64p forgetting (step 13), 128p forgetting (step 49) |
 
 推荐配置 (0.5B + mixed):
-- num_problems=32, lr=5e-6, epochs=1, batch=2, generations=4
-- 预期: 32 步训练，reward 稳定不崩溃
+- num_problems=40, lr=5e-6, epochs=1, batch=2, generations=4
+- 预期: reward 稳定在 0.8-1.0 范围
 
-替代方案: 保持 64 problems 但切换 difficulty=simple
-- 适用于需要更多训练数据但不需要 hard 题目的场景
-
-### Seed 随机化策略
-
-多轮训练时（traj-loop 或手动多轮）:
-- 每轮使用不同 seed: `seed = base_seed + round_number`
-- 或启用 dataset shuffle: `shuffle=True`
-- 目的: 避免相同问题固定在相同 step，导致零 reward 步骤的周期性模式
-
-轨迹证据:
-- R3 和 R5 使用相同 seed=42，零 reward 步骤完全一致 [5,6,12,25,31]
-- 训练未改善模型在这些特定问题上的表现
-- 变更 seed 可以让模型接触不同的问题排列，获得更多样的学习信号
-
-### num_problems 精细化范围 (0.5B 模型)
-
-基于 5 轮训练数据更新推荐范围:
-
-| difficulty | 推荐范围 | 依据 |
-|-----------|---------|------|
-| mixed (20% hard) | 40-48 | 32 太简单 (loss=0), 64 forgetting |
-| mixed-hard (50% hard) | 24-32 | hard 比例增加后需减少总量 |
-| hard | 16-24 | 64 完全超出能力 (avg=0.19) |
-
-默认推荐配置 (0.5B + 正式训练):
-- num_problems=48, difficulty=mixed, lr=5e-6, epochs=1
-- 预期: 比 32 problems 更有挑战性，但不会 forgetting
-
-轨迹证据:
-- R1/R2 (64p, mixed): catastrophic forgetting at step 14-16
-- R3/R5 (32p, mixed): loss=0, 无学习效果
-- 推断: 最优点在 32-64 之间，推荐 40-48
-
-### num_problems 最优范围精细化 (0.5B + mixed, 基于 2 轮数据)
-
-2 轮训练数据收敛出更精确的推荐范围:
-
-| num_problems | 结果 | 证据 |
-|-------------|------|------|
-| 32 | 无 forgetting 但 loss=0 (无学习) | run_1777723566: avg=0.773, loss=0 全程 |
-| 48 | avg=0.849 但 step 41-47 格式退化 | run_1777726900: 后 20% avg=0.475 |
-| 40 (推断) | 平衡点 | 32 太简单, 48 后期崩溃 |
-
-更新推荐:
-- 首轮训练: num_problems=40 (安全起点)
-- avg_reward >= 0.85 且无后期 forgetting: 可尝试 44
-- 出现后期 forgetting: 减少到 36
-- 禁止 0.5B+mixed 使用 num_problems > 48
-
-**Loss=0 诊断**:
-| 症状 | 调整 | 原因 |
-|------|------|------|
-| loss=0 全程 + reward >= 0.8 | difficulty 提升一级 (simple→mixed, mixed→hard) | 题目太简单，模型预训练能力已覆盖，GRPO 无学习信号 |
-| loss=0 全程 + reward < 0.5 | 检查 num_generations 和 temperature | reward variance 不足，GRPO baseline 估计有问题 |
-
-### 题目难度自动升级
-
-当调参输入满足以下条件时，优先建议提高难度而非调整超参数:
-- avg_reward >= 0.8 且 loss 接近 0
-- difficulty 当前为 simple 或 mixed
-
-诊断逻辑:
-  if reward >= 0.8 and loss ≈ 0:
-      if difficulty == "simple": → 建议切换到 mixed
-      if difficulty == "mixed": → 建议增加 num_problems 或切换到 hard
-      不要调 lr/epochs/batch 等超参数，问题不在训练动态而在数据难度
+警告: num_problems >= 64 在 mixed difficulty 下会导致 catastrophic forgetting，即使 lr=5e-6 且 epochs=1。
 
 ## 配置预检（生成配置后、启动前执行）
 
