@@ -199,7 +199,10 @@ def main(config: TrainingConfig | None = None):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    if torch.backends.mps.is_available():
+    if torch.cuda.is_available():
+        device = "cuda"
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
+    elif torch.backends.mps.is_available():
         device = "mps"
         dtype = torch.float32
     else:
@@ -208,7 +211,7 @@ def main(config: TrainingConfig | None = None):
 
     model = AutoModelForCausalLM.from_pretrained(
         config.model_name, torch_dtype=dtype, trust_remote_code=True,
-    )
+    ).to(device)
     param_count = sum(p.numel() for p in model.parameters())
     log.log_model_loaded(config.model_name, device, param_count)
 
