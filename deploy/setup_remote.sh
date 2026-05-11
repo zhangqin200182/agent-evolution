@@ -6,13 +6,13 @@
 #   bash deploy/setup_remote.sh
 #
 # Environment variables:
-#   SSH_HOST     - server IP (default: 192.168.9.142)
+#   SSH_HOST     - server IP (default: <server-ip>)
 #   SSH_USER     - server user (default: root)
 #   CONTAINER    - container name (default: agent5.0.0_qjy)
 
 set -euo pipefail
 
-SSH_HOST="${SSH_HOST:-192.168.9.142}"
+SSH_HOST="${SSH_HOST:-<server-ip>}"
 SSH_USER="${SSH_USER:-root}"
 SSH_PORT="${SSH_PORT:-22}"
 CONTAINER="${CONTAINER:-agent5.0.0_qjy}"

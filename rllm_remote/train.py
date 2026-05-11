@@ -24,7 +24,7 @@ def main():
     )
 
     # Connection
-    parser.add_argument("--ssh-host", default="192.168.9.142")
+    parser.add_argument("--ssh-host", default="<server-ip>")
     parser.add_argument("--ssh-port", type=int, default=22)
     parser.add_argument("--ssh-user", default="root")
     parser.add_argument("--ssh-key", default="~/.ssh/id_rsa")

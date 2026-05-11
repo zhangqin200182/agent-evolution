@@ -32,7 +32,7 @@ rllm 项目当前仅支持 Mac 本地训练（`rllm_train`，基于 TRL，CPU/MP
 └─────────┼────────────────────────────────────────────────────┘
           │
   ┌───────┴────────────────────────────────────────────────────┐
-  │               192.168.9.142（NPU 服务器）                  │
+  │               <server-ip>（NPU 服务器）                  │
   │                                                            │
   │  ┌──────────────────────────────────────┐                 │
   │  │  容器: agent5.0.0_qjy                │                 │
@@ -172,7 +172,7 @@ rllm 项目当前仅支持 Mac 本地训练（`rllm_train`，基于 TRL，CPU/MP
 
 ### 5.1 前置条件
 
-- Mac 上已配置到 192.168.9.142 的 SSH 密钥认证
+- Mac 上已配置到 <server-ip> 的 SSH 密钥认证
 - 服务器上容器 `agent5.0.0_qjy` 已运行（Dockerfile：`AgentSDK/aura/dockers/Dockerfile`）
 - 模型权重和训练数据已在服务器指定路径就位
 
@@ -191,7 +191,7 @@ bash deploy/setup_remote.sh
 python -m rllm_remote.train --lr 1e-6 --epochs 100 --batch-size 32
 
 # 通过环境变量
-SSH_HOST=192.168.9.142 EPOCHS=50 bash deploy/run_remote.sh
+SSH_HOST=<server-ip> EPOCHS=50 bash deploy/run_remote.sh
 
 # 通过技能系统
 /rllm-train backend=remote, NPU 训练 math agent, reward >= 0.8
@@ -201,7 +201,7 @@ SSH_HOST=192.168.9.142 EPOCHS=50 bash deploy/run_remote.sh
 
 ```bash
 # SSH 登录并 attach 到 tmux 会话
-ssh root@192.168.9.142
+ssh root@<server-ip>
 docker exec -it agent5.0.0_qjy tmux attach -t train_<run_id>
 
 # 下载训练结果到本地

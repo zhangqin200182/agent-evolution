@@ -173,7 +173,7 @@ BASE_CONFIG: dict[str, Any] = {
             "executor_kwargs": {
                 "engine": "vllm_proxy",
                 "engine_kwargs": {
-                    "chat_server": "http://7.246.80.80:8080",
+                    "chat_server": "http://<infer-server-ip>:8080",
                     "prefill_server_list": [],
                     "decode_server_list": [],
                     "model_name": "Qwen3-235B-A22B",

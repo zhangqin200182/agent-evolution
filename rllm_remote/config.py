@@ -14,7 +14,7 @@ class RemoteTrainConfig:
     """Configuration for remote NPU training via AgentSDK on Ascend server."""
 
     # === Server connection ===
-    ssh_host: str = "192.168.9.142"
+    ssh_host: str = "<server-ip>"
     ssh_port: int = 22
     ssh_user: str = "root"
     ssh_key_path: str = "~/.ssh/id_rsa"
@@ -63,7 +63,7 @@ class RemoteTrainConfig:
     agent_max_tokens: int = 4096
 
     # === Infer service ===
-    chat_server_url: str = "http://7.246.80.80:8080"
+    chat_server_url: str = "http://<infer-server-ip>:8080"
     model_display_name: str = "Qwen3-235B-A22B"
 
     # === Output ===

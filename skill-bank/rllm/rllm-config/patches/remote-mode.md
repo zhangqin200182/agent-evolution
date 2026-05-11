@@ -38,7 +38,7 @@ superseded_by: ""
 model_name_or_path = "/opt/DPC/models/l00619320/code/AGENTIC_RL_WS/AgenticRL_Binary_Files/models/Qwen2.5-7B-Instruct"
 train_data_path = "/opt/DPC/models/l00619320/code/VERL_NPU_WS/data/gsm8k/train.parquet"
 val_data_path = "/opt/DPC/models/l00619320/code/VERL_NPU_WS/data/gsm8k/test.parquet"
-ssh_host = "192.168.9.142"
+ssh_host = "<server-ip>"
 container_name = "agent5.0.0_qjy"
 ```
 

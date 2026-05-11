@@ -71,7 +71,7 @@ python -m rllm_train.train "用 qwen-0.5b 训练数学 agent，64 个问题"
 
 ```bash
 # 一键启动远程训练
-python -m rllm_remote.train --ssh-host 192.168.9.142 --ssh-password "xxx" \
+python -m rllm_remote.train --ssh-host <server-ip> --ssh-password "xxx" \
     --epochs 100 --batch-size 32 --lr 1e-6
 
 # 监控训练进度（含 reward 趋势、性能、异常检测）

@@ -29,7 +29,7 @@ superseded_by: ""
 使用 monitor.py 的 `--analyze` 模式，自动从远程 TB + 日志提取数据并生成 analysis.json：
 
 ```bash
-python -m rllm_remote.monitor <run_id> --ssh-password "Huawei@123" --analyze
+python -m rllm_remote.monitor <run_id> --ssh-password "<your-password>" --analyze
 ```
 
 此命令会：

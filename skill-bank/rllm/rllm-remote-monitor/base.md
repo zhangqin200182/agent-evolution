@@ -26,7 +26,7 @@ config.json 中不包含密码。加载配置后必须手动设置：
 
 ```python
 config = RemoteTrainConfig.from_json('rllm_remote/output/runs/<run_id>/config.json')
-config.ssh_password = 'Huawei@123'  # 或从环境变量读取
+config.ssh_password = '<your-password>'  # 或从环境变量读取
 ```
 <!-- /section:intro -->
 
@@ -39,10 +39,10 @@ config.ssh_password = 'Huawei@123'  # 或从环境变量读取
 
 ```bash
 # 单次报告（包含 step 进度、reward、loss、性能、ETA、异常检测）
-python -m rllm_remote.monitor <run_id> --pid <PID> --ssh-password "Huawei@123"
+python -m rllm_remote.monitor <run_id> --pid <PID> --ssh-password "<your-password>"
 
 # 持续轮询（每 20s 刷新）
-python -m rllm_remote.monitor <run_id> --pid <PID> --ssh-password "Huawei@123" --watch
+python -m rllm_remote.monitor <run_id> --pid <PID> --ssh-password "<your-password>" --watch
 ```
 
 数据来源：
@@ -60,7 +60,7 @@ python3 -c "
 from rllm_remote.config import RemoteTrainConfig
 from rllm_remote.ssh import RemoteExecutor
 config = RemoteTrainConfig.from_json('rllm_remote/output/runs/<run_id>/config.json')
-config.ssh_password = 'Huawei@123'
+config.ssh_password = '<your-password>'
 executor = RemoteExecutor(config)
 alive = executor.check_pid('<PID>')
 log = executor.tail_log(f'{config.remote_output_dir}/{config.run_id}/training_log.txt', lines=30)
@@ -99,7 +99,7 @@ python3 -c "
 from rllm_remote.config import RemoteTrainConfig
 from rllm_remote.ssh import RemoteExecutor
 config = RemoteTrainConfig.from_json('rllm_remote/output/runs/<run_id>/config.json')
-config.ssh_password = 'Huawei@123'
+config.ssh_password = '<your-password>'
 executor = RemoteExecutor(config)
 
 # 拉取最近 100 行日志
@@ -126,7 +126,7 @@ from rllm_remote.ssh import RemoteExecutor
 import os
 
 config = RemoteTrainConfig.from_json('rllm_remote/output/runs/<run_id>/config.json')
-config.ssh_password = 'Huawei@123'
+config.ssh_password = '<your-password>'
 executor = RemoteExecutor(config)
 remote_dir = f'{config.remote_output_dir}/{config.run_id}'
 local_dir = f'{config.local_output_dir}/{config.run_id}'

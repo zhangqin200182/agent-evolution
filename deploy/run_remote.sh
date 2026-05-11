@@ -7,7 +7,7 @@
 #   bash deploy/run_remote.sh path/to/config.json       # from JSON config
 #
 # Environment variables:
-#   SSH_HOST        - server IP (default: 192.168.9.142)
+#   SSH_HOST        - server IP (default: <server-ip>)
 #   SSH_USER        - server user (default: root)
 #   SSH_KEY         - SSH key path (default: ~/.ssh/id_rsa)
 #   CONTAINER       - container name (default: agent5.0.0_qjy)
@@ -33,7 +33,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo "=== Remote NPU Agent RL Training ==="
-echo "  Server:    ${SSH_HOST:-192.168.9.142}"
+echo "  Server:    ${SSH_HOST:-<server-ip>}"
 echo "  Container: ${CONTAINER:-agent5.0.0_qjy}"
 echo ""
 

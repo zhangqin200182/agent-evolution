@@ -12,11 +12,11 @@ metadata:
 # rllm-remote-run — 远程 NPU 训练启动
 
 <!-- section:intro -->
-你负责将 Agent RL 训练任务提交到远程 NPU 服务器（192.168.9.142）上的 AgentSDK 容器中执行。
+你负责将 Agent RL 训练任务提交到远程 NPU 服务器（<server-ip>）上的 AgentSDK 容器中执行。
 
 ## 前置条件
 
-- SSH 密码可登录 192.168.9.142
+- SSH 密码可登录 <server-ip>
 - 服务器上容器 `agent5.0.0_qjy` 已运行
 - 服务器上已有模型权重和训练数据
 - 远程训练配置文件已生成: `rllm_remote/output/runs/<run_id>/config.json`
@@ -27,7 +27,7 @@ metadata:
 config.json 中不包含密码。启动时必须通过 CLI 传入 `--ssh-password`：
 
 ```bash
-python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-password "Huawei@123"
+python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-password "<your-password>"
 ```
 <!-- /section:intro -->
 
@@ -37,7 +37,7 @@ python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-p
 启动训练前，先验证连通性（需要密码）：
 
 ```bash
-cd /Users/kevin/code/MyProject && python -m rllm_remote.train --check --ssh-password "Huawei@123"
+cd /Users/kevin/code/MyProject && python -m rllm_remote.train --check --ssh-password "<your-password>"
 ```
 
 如果验证失败：
@@ -64,7 +64,7 @@ print(config.summary())
 使用 nohup 后台模式启动（断连不影响训练）：
 
 ```bash
-cd /Users/kevin/code/MyProject && python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-password "Huawei@123"
+cd /Users/kevin/code/MyProject && python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-password "<your-password>"
 ```
 
 启动命令会：
@@ -82,7 +82,7 @@ python3 -c "
 from rllm_remote.config import RemoteTrainConfig
 from rllm_remote.ssh import RemoteExecutor
 config = RemoteTrainConfig.from_json('rllm_remote/output/runs/<run_id>/config.json')
-config.ssh_password = 'Huawei@123'
+config.ssh_password = '<your-password>'
 executor = RemoteExecutor(config)
 alive = executor.check_pid('<PID>')
 print(f'PID alive: {alive}')
@@ -100,14 +100,14 @@ print(log[:300])
 ```
 远程训练已启动：
   Run ID:      <run_id>
-  Server:      192.168.9.142
+  Server:      <server-ip>
   Container:   agent5.0.0_qjy
   PID:         <pid>
   远程日志:    /home/qjy/code/AgentSDK/master/AgentSDK/outputs/<run_id>/training_log.txt
   本地配置:    rllm_remote/output/runs/<run_id>/
 
 SSH 登录查看:
-  ssh root@192.168.9.142
+  ssh root@<server-ip>
   docker exec -it agent5.0.0_qjy tail -f /home/qjy/code/AgentSDK/master/AgentSDK/outputs/<run_id>/training_log.txt
 ```
 <!-- /section:output -->
@@ -117,7 +117,7 @@ SSH 登录查看:
 
 | 错误类型 | 处理方式 |
 |---|---|
-| SSH 连接超时 | 检查密码和网络，确认 192.168.9.142 可达 |
+| SSH 连接超时 | 检查密码和网络，确认 <server-ip> 可达 |
 | 容器未运行 | 提示: `docker start agent5.0.0_qjy` |
 | NPU OOM | 减小 batch_size、ppo_mini_batch_size、tensor_parallel_size |
 | 配置文件不存在 | 提示先运行 rllm-config 生成远程配置 |
@@ -131,7 +131,7 @@ SSH 登录查看:
 
 ```bash
 # 进入容器
-ssh root@192.168.9.142
+ssh root@<server-ip>
 docker exec -it agent5.0.0_qjy bash
 
 # 查看日志
