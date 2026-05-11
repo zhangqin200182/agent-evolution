@@ -16,6 +16,10 @@ groups:
         output: .claude/skills/rllm-clarify/SKILL.md
       rllm-run:
         output: .claude/skills/rllm-run/SKILL.md
+      rllm-remote-run:
+        output: .claude/skills/rllm-remote-run/SKILL.md
+      rllm-remote-monitor:
+        output: .claude/skills/rllm-remote-monitor/SKILL.md
 
   traj:
     description: "trajectory 轨迹捕获、分析与 skill 优化"

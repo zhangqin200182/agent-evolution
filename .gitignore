@@ -1,5 +1,6 @@
 # Upstream reference code (not part of this project)
 rllm/
+!skill-bank/rllm/
 trl/
 
 # Training outputs
@@ -32,3 +33,6 @@ Thumbs.db
 # Claude Code (keep skills/)
 .claude/*
 !.claude/skills/
+
+# Remote training outputs
+rllm_remote/output/

@@ -1,0 +1,11 @@
+base: base.md
+
+active:
+  - 001-decision-tree-ext
+  - 002-epoch-analysis
+  - traj-20260502-152342-analysis-framework
+  - remote-results
+
+disabled: []
+
+profiles: {}

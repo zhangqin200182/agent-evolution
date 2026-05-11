@@ -23,6 +23,7 @@ active:
 - traj-20260506-080408-param-ranges
 - traj-20260506-082351-tuning
 - traj-20260506-112523-initial-config
+- remote-mode
 base: base.md
 disabled:
 - traj-20260502-213850-late-forgetting-tuning
