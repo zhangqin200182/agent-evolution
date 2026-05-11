@@ -1,0 +1,50 @@
+# veRL config for math agent RL training
+# This is a hydra config consumed by verl.trainer.main_ppo
+
+data:
+  tokenizer: null  # set via override
+  train_files: null  # set via override
+  val_files: null
+  train_batch_size: 8
+  max_prompt_length: 1024
+  max_response_length: 512
+
+actor_rollout_ref:
+  model:
+    path: Qwen/Qwen2.5-3B-Instruct
+  actor:
+    optim:
+      lr: 1e-6
+      weight_decay: 0.01
+      warmup_steps_ratio: 0.1
+    ppo_mini_batch_size: 4
+    ppo_micro_batch_size: 4
+    use_kl_loss: true
+    kl_loss_coef: 0.02
+    clip_ratio: 0.2
+    entropy_coeff: 0.01
+    max_grad_norm: 1.0
+  rollout:
+    name: vllm
+    temperature: 0.7
+    top_p: 0.9
+    n: 4
+    tensor_model_parallel_size: 1
+    gpu_memory_utilization: 0.85
+    max_num_batched_tokens: 8192
+  ref:
+    log_prob_micro_batch_size: 4
+
+algorithm:
+  adv_estimator: grpo
+
+trainer:
+  total_epochs: 3
+  n_gpus_per_node: 1
+  save_freq: 50
+  default_local_dir: ./outputs/verl_run
+  project_name: rllm_verl
+  experiment_name: math_agent
+
+reward_model:
+  reward_fn: rllm_verl.reward.reward_function
