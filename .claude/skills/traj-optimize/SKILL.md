@@ -61,6 +61,7 @@ generator = PatchGenerator()
 for suggestion in suggestions:
     patch_path = generator.generate_patch(suggestion)
     # patch 写入 skill-bank/{group}/{skill}/patches/traj-{timestamp}-{section}.md
+    # 注意: generate_patch() 只写文件，不激活。激活在 Step 5 确认后执行。
 ```
 
 ### 3.5 验证 patch 目标 section
@@ -145,11 +146,21 @@ for patch in patches:
 
 自动接受的 patch 仍然完整展示信息（不跳过展示），只是跳过确认步骤。
 
-### 6. 编译
+### 6. 激活与编译
 
-确认后（人工或自动）:
+审核完成后，对每个 patch 执行激活或拒绝:
+
 ```python
+from traj_opt.optimizer.patch_generator import PatchGenerator
 from traj_opt.optimizer.compiler_bridge import CompilerBridge
+
+generator = PatchGenerator()
+
+for patch in accepted:
+    generator.accept_patch(patch.skill_name, patch.patch_id)
+
+for patch in rejected:
+    generator.reject_patch(patch.skill_name, patch.patch_id)
 
 bridge = CompilerBridge()
 for skill_name in affected_skills:
@@ -157,6 +168,8 @@ for skill_name in affected_skills:
 ```
 
 输出编译结果和接受/拒绝统计。
+
+**生命周期**: generate_patch() 只写文件 → 展示审核 → accept_patch() 激活到 manifest → compile。拒绝的 patch 文件被删除，不残留在 manifest 中。
 
 ## Patch 命名规范
 

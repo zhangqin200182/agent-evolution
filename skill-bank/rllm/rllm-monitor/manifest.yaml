@@ -7,6 +7,7 @@ active:
 - traj-20260502-152342-anomaly-detection
 - traj-20260503-091950-data-surfacing
 - traj-20260503-164321-anomaly-detection
+- traj-20260506-080408-anomaly-detection
 base: base.md
 disabled: []
 profiles: {}

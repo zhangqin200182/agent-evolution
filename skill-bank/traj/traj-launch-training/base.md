@@ -76,21 +76,29 @@ if round_num is None:
 
 ### 3. 启动训练
 
-准备日志目录:
+准备日志目录和 session ID:
 ```bash
 mkdir -p traj_opt/output/rounds/round_{N}
 ```
+
+```python
+import uuid
+session_id = str(uuid.uuid4())
+```
+
+将 `session_id` 保存为变量，后续注入环境变量。
 
 #### 交互式（默认）
 
 用 osascript 打开新 Terminal 窗口:
 ```bash
 PROJECT_DIR=$(pwd)
+SESSION_ID="{session_id}"
 osascript << ENDSCRIPT
 tell application "Terminal"
     activate
     set projectDir to "$PROJECT_DIR"
-    set trainCmd to "claude \"/rllm-train round={N} -- {描述}\""
+    set trainCmd to "export TRAJ_HEARTBEAT_PATH=traj_opt/output/rounds/round_{N}/heartbeat.json && export TRAJ_ROUND_NUM={N} && export TRAJ_SESSION_ID=$SESSION_ID && claude \"/rllm-train round={N} -- {描述}\""
     do script "cd " & projectDir & " && " & trainCmd
 end tell
 ENDSCRIPT
@@ -101,7 +109,10 @@ ENDSCRIPT
 使用 Bash 工具的 `run_in_background=true` 启动 claude -p（不要用 shell `&`）:
 
 ```bash
-claude -p --permission-mode auto \
+TRAJ_HEARTBEAT_PATH=traj_opt/output/rounds/round_{N}/heartbeat.json \
+TRAJ_ROUND_NUM={N} \
+TRAJ_SESSION_ID={session_id} \
+  claude -p --permission-mode auto \
   "/rllm-train round={N} -- auto 模式, {描述}" \
   > traj_opt/output/rounds/round_{N}/cli1.log 2>&1
 ```
@@ -109,6 +120,9 @@ claude -p --permission-mode auto \
 关键约束:
 - **不要用 `&` 后台化** — 用 Bash 工具的 `run_in_background=true` 参数代替。`&` 会导致 shell 立即返回，Bash 工具误报 "completed"，且 stdout 重定向可能失效。
 - **自动注入 "auto 模式"** — 在训练描述前追加 "auto 模式, "，确保 rllm-train 以 auto 模式执行（不等待用户确认）。如果描述中已包含 "auto" 关键词则不重复追加。
+- **TRAJ_HEARTBEAT_PATH 环境变量** — 训练进程（rllm_train）的 TrainingLogger 会在每个 step 完成后原子写入此文件，提供实时进度（step/total, reward）。CLI-2 的轮询脚本通过 mtime 变化检测活跃度。
+- **TRAJ_ROUND_NUM 环境变量** — 训练进程在 print_training_report() 时保底写入 status.json，即使 Claude Code 编排层（Phase 6.5）因上下文耗尽而失败。
+- **TRAJ_SESSION_ID 环境变量** — 预生成的 UUID，供 PostToolUse hook 作为 session 目录名，消除快照差分法的所有边界情况。Phase 6.5 直接读取此变量，不再做目录差分。
 - **cli1.log 是事后审计日志**，不是实时日志。由于 Node.js block buffering，`claude -p` 的 stdout 重定向到文件时只在进程退出后才 flush，训练期间 cli1.log 为空。实时训练进度通过 heartbeat.json 获取（见 traj-loop 轮询机制）。训练日志在 `rllm_train/output/runs/{run_id}/training_log.txt`。
 
 PID 追踪: `run_in_background` 返回的 task_id 即为进程标识，写入 cli1.pid 供参考:

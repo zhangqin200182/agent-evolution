@@ -46,6 +46,15 @@ metadata:
 /traj-loop 用 qwen-0.5b 训练, 3 轮, --auto --auto-approve
 /traj-loop 用 qwen-0.5b 训练, 5 轮, --auto --auto-approve=high
 ```
+
+### auto-approve 轮次推荐
+
+| 轮次 | 推荐 auto-approve | 原因 |
+|------|-------------------|------|
+| 3 轮 | `--auto-approve` (medium) | high 需要 3+ 轮证据，3 轮 loop 中前 2 轮不会有 high confidence patch |
+| 5+ 轮 | `--auto-approve=high` | 第 3 轮开始可能产生 high confidence 建议 |
+| 10+ 轮 | `--auto-approve=high` | 充分数据，high 阈值安全 |
+
 <!-- /section:params -->
 
 <!-- section:rules -->
@@ -75,19 +84,39 @@ metadata:
 ### 0.5 检查/恢复状态
 
 ```python
-import json, os
+import json, os, shutil
 state_path = "traj_opt/output/loop_state.json"
 if os.path.exists(state_path):
     with open(state_path) as f:
         state = json.load(f)
-    if state["current_round"] <= state["total_rounds"]:
+    if state.get("status") == "completed":
+        # 上一次 loop 已完成
+    elif state["current_round"] <= state["total_rounds"]:
         # 存在未完成的循环
 ```
 
-如果存在未完成的 loop_state.json，用 AskUserQuestion 询问:
+#### 半自动模式（无 --auto）
+
+如果存在 loop_state.json，用 AskUserQuestion 询问:
 - 从断点继续（Round {current_round}）
-- 重新开始（覆盖旧状态）
+- 重新开始（清理旧 round 目录并覆盖状态）
 - 取消
+
+#### 全自动模式（--auto）
+
+自动决策:
+- 旧 loop 已 completed → 自动清理旧 round 目录，重新开始
+- 旧 loop 未完成 → 自动从断点继续
+
+#### 清理操作
+
+"重新开始"时执行:
+```python
+import shutil
+for n in range(1, state["total_rounds"] + 1):
+    shutil.rmtree(f"traj_opt/output/rounds/round_{n}", ignore_errors=True)
+os.remove("traj_opt/output/loop_state.json")
+```
 
 ### 1. 初始化状态
 
@@ -127,8 +156,12 @@ for round_num in start_round..total_rounds:
 
     轮询结果:
     - training_complete → 继续 Step 2.3
-    - training_failed → 记录失败，询问是否继续下一轮
-    - 超时 → 报告超时，询问是否继续等待
+    - training_failed:
+      - 半自动: 记录失败，用 AskUserQuestion 询问是否继续下一轮
+      - 全自动 (--auto): 记录失败，自动跳到下一轮
+    - 超时:
+      - 半自动: 报告超时，用 AskUserQuestion 询问是否继续等待
+      - 全自动 (--auto): 标记本轮失败，自动跳到下一轮
 
     Step 2.3: 执行优化
     ───────────────────
@@ -199,79 +232,28 @@ traj-loop 优化报告
 
 CLI-1 训练完成后会通过 rllm-train Phase 6.5 写入 status.json。traj-loop 通过轮询此文件检测训练完成。同时读取 heartbeat.json 判断 CLI-1 是否仍在活跃工作，实现自适应超时。
 
-### 轮询实现约束
+### 轮询实现方式
 
-**必须使用 Bash 工具的 `run_in_background=true` 执行 Python 轮询脚本。禁止使用 Monitor 工具。**
+**使用 Monitor 工具（`persistent: true`）执行 Python 轮询脚本。** 每行 stdout 输出实时推送到对话中，用户可以看到训练进度。
 
-原因: Monitor 工具的 timeout_ms 上限为 600000ms (10 分钟)，不足以覆盖训练时间（可能 30+ 分钟）。而 Bash `run_in_background` 启动的脚本由脚本自身控制超时，不受 Bash timeout 限制。
+Monitor `persistent: true` 没有超时限制，由脚本自身的超时逻辑控制退出。脚本退出时 Monitor 自动结束。
 
 ### 轮询脚本
 
-使用 Bash `run_in_background=true` 执行以下脚本:
+使用 Monitor 工具执行:
 
-```bash
-python3 -c "
-import json, os, time, sys
-
-status_path = 'traj_opt/output/rounds/round_{round_num}/status.json'
-heartbeat_path = 'traj_opt/output/rounds/round_{round_num}/heartbeat.json'
-base_timeout = 1800       # 30 min base (no heartbeat ever received)
-idle_timeout = 600        # 10 min since last heartbeat update
-last_heartbeat_mtime = 0
-
-start = time.time()
-
-while True:
-    # 1. Check terminal state
-    if os.path.exists(status_path):
-        with open(status_path) as f:
-            status = json.load(f)
-        if status['status'] == 'training_complete':
-            reward = status['training']['reward']
-            print(f'COMPLETE: reward={reward}')
-            sys.exit(0)
-        elif status['status'] == 'training_failed':
-            error = status.get('training', {}).get('error', 'unknown')
-            print(f'FAILED: {error}')
-            sys.exit(1)
-
-    # 2. Check heartbeat — reset idle timer on update
-    hb_msg = ''
-    if os.path.exists(heartbeat_path):
-        mtime = os.path.getmtime(heartbeat_path)
-        if mtime > last_heartbeat_mtime:
-            last_heartbeat_mtime = mtime
-            try:
-                with open(heartbeat_path) as f:
-                    hb = json.load(f)
-                hb_msg = f' | {hb.get(\"phase\",\"\")} {hb.get(\"step\",\"\")}'.rstrip()
-                if hb.get('reward') is not None:
-                    hb_msg += f' reward={hb[\"reward\"]}'
-            except (json.JSONDecodeError, KeyError):
-                pass
-
-    elapsed = time.time() - start
-
-    # 3. Timeout: adaptive based on heartbeat
-    if last_heartbeat_mtime > 0:
-        idle = time.time() - last_heartbeat_mtime
-        if idle > idle_timeout:
-            print(f'TIMEOUT: no heartbeat update for {int(idle)}s (idle_timeout={idle_timeout}s)')
-            sys.exit(2)
-    else:
-        if elapsed > base_timeout:
-            print(f'TIMEOUT: {int(elapsed)}s elapsed, no heartbeat ever received')
-            sys.exit(2)
-
-    print(f'WAITING: {int(elapsed)}s elapsed{hb_msg}', flush=True)
-    time.sleep(30)
-"
+```python
+Monitor(
+    description="Round {round_num} training progress",
+    persistent=True,
+    command='python3 -c "\nimport json, os, time, sys\n\nstatus_path = \'traj_opt/output/rounds/round_{round_num}/status.json\'\nheartbeat_path = \'traj_opt/output/rounds/round_{round_num}/heartbeat.json\'\nbase_timeout = 1800\nidle_timeout = 600\nlast_heartbeat_mtime = 0\n\nstart = time.time()\n\nwhile True:\n    if os.path.exists(status_path):\n        with open(status_path) as f:\n            status = json.load(f)\n        if status[\'status\'] == \'training_complete\':\n            reward = status[\'training\'][\'reward\']\n            print(f\'COMPLETE: reward={reward}\', flush=True)\n            sys.exit(0)\n        elif status[\'status\'] == \'training_failed\':\n            error = status.get(\'training\', {}).get(\'error\', \'unknown\')\n            print(f\'FAILED: {error}\', flush=True)\n            sys.exit(1)\n\n    hb_msg = \'\'\n    if os.path.exists(heartbeat_path):\n        mtime = os.path.getmtime(heartbeat_path)\n        if mtime > last_heartbeat_mtime:\n            last_heartbeat_mtime = mtime\n            try:\n                with open(heartbeat_path) as f:\n                    hb = json.load(f)\n                hb_msg = f\' | {hb.get(\\\"phase\\\",\\\"\\\")} {hb.get(\\\"step\\\",\\\"\\\")}\'.rstrip()\n                if hb.get(\'reward\') is not None:\n                    hb_msg += f\' reward={hb[\\\"reward\\\"]}\'\n            except (json.JSONDecodeError, KeyError):\n                pass\n\n    elapsed = time.time() - start\n\n    if last_heartbeat_mtime > 0:\n        idle = time.time() - last_heartbeat_mtime\n        if idle > idle_timeout:\n            print(f\'TIMEOUT: no heartbeat update for {int(idle)}s (idle_timeout={idle_timeout}s)\', flush=True)\n            sys.exit(2)\n    else:\n        if elapsed > base_timeout:\n            print(f\'TIMEOUT: {int(elapsed)}s elapsed, no heartbeat ever received\', flush=True)\n            sys.exit(2)\n\n    print(f\'WAITING: {int(elapsed)}s elapsed{hb_msg}\', flush=True)\n    time.sleep(30)\n"'
+)
 ```
 
-轮询完成后，通过 task notification 收到结果。读取输出判断状态:
-- 输出含 `COMPLETE:` → 训练完成，继续 Step 2.3
-- 输出含 `FAILED:` → 训练失败，记录并询问是否继续
-- 输出含 `TIMEOUT:` → 超时，询问是否继续等待
+每行输出作为 Monitor 通知实时显示在对话中。脚本退出时根据最后一行判断状态:
+- `COMPLETE:` → 训练完成，继续 Step 2.3
+- `FAILED:` → 训练失败，记录并询问是否继续
+- `TIMEOUT:` → 超时，询问是否继续等待
 
 ### 轮询间隔与超时
 
@@ -279,6 +261,10 @@ while True:
 - 基础超时: 30 分钟（无 heartbeat 时的兜底，兼容未升级的 rllm-train）
 - 空闲超时: 10 分钟（有 heartbeat 但停止更新时，说明 CLI-1 可能卡住）
 - 超时后询问用户（半自动）或自动跳过（全自动 `--auto`）
+
+### 实时进度来源
+
+heartbeat.json 由训练进程（rllm_train 的 TrainingLogger）在每个 step 完成后直接写入，不依赖 Claude Code 工具调用。典型更新频率: 每 5-15 秒一次（取决于 step 耗时）。Monitor 的每行输出会包含最新的 step/reward 信息，用户可实时看到训练进展。
 <!-- /section:polling -->
 
 <!-- section:state -->

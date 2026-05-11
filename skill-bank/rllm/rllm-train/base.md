@@ -159,15 +159,6 @@ options:
 #### 部分输入补充
 
 只问缺失的那一个问题，不重复问已知信息。
-
-#### 记录轨迹目录快照
-
-Phase 0 最后一步，记录当前 raw 目录下已有的 session 目录：
-```python
-import os
-existing = set(os.listdir("traj_opt/output/rllm/raw/")) if os.path.exists("traj_opt/output/rllm/raw/") else set()
-```
-将 `existing` 保存为变量，供 Phase 6.5 使用。
 <!-- /section:phase0 -->
 
 <!-- section:phase1-5 -->
@@ -269,6 +260,11 @@ RoundState().write_heartbeat(round_num, run_id, phase="config", message="配置�
 # Phase 3 完成后:
 RoundState().write_heartbeat(round_num, run_id, phase="training", message="训练已启动")
 
+# Phase 3-4 训练期间（自动，无需编排层操作）:
+# TrainingLogger 在每个 step 完成后自动写入 heartbeat（通过 TRAJ_HEARTBEAT_PATH 环境变量）
+# 格式: {"phase": "training", "step": "3/16", "reward": 0.75, ...}
+# 更新频率: 每个训练 step（约 5-15 秒一次）
+
 # Phase 4 完成后:
 RoundState().write_heartbeat(round_num, run_id, phase="monitoring",
                              step=f"{current_step}/{total_steps}", reward=latest_reward,
@@ -286,7 +282,11 @@ RoundState().write_heartbeat(round_num, new_run_id, phase="tuning",
                              message=f"第 {attempt} 次调参")
 ```
 
-heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 status.json 同目录。CLI-2 通过文件 mtime 变化检测活跃度，实现自适应超时。
+heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 status.json 同目录。两层写入机制:
+1. **训练进程直接写入**（Phase 3-4 期间）: TrainingLogger 每个 step 原子写入，提供实时 step/reward 进度
+2. **编排层写入**（Phase 转换时）: 提供粗粒度阶段状态（config/analyzing/tuning）
+
+CLI-2 通过文件 mtime 变化检测活跃度，实现自适应超时。
 <!-- /section:phase1-5 -->
 
 <!-- section:phase6 -->
@@ -362,33 +362,29 @@ heartbeat.json 写入 `traj_opt/output/rounds/round_{N}/heartbeat.json`，与 st
 
 ### Phase 6.5: 写入轮次状态
 
+**保底机制**: 训练进程（TrainingLogger）在 print_training_report() 时会通过 `TRAJ_ROUND_NUM` 环境变量自动写入 status.json。因此即使编排层因上下文耗尽而无法执行 Phase 6.5，CLI-2 仍能检测到训练完成。以下步骤是"优先尝试"，提供更完整的信息（多 run_id 等）。
+
 1. 等待 hooks 刷新（sleep 2s，确保 PostToolUse hooks 完成写入）
-2. 获取当前 session_id（快照差分法）:
+2. 获取 session_id — 直接读取环境变量:
    ```bash
    python3 -c "
    import os
-   existing = {Phase 0 记录的快照集合}
-   current = set(os.listdir('traj_opt/output/rllm/raw/')) if os.path.exists('traj_opt/output/rllm/raw/') else set()
-   new_sessions = current - existing
-   if new_sessions:
-       session_id = sorted(new_sessions)[-1]
-   else:
-       session_id = 'unknown'
+   session_id = os.environ.get('TRAJ_SESSION_ID', 'unknown')
    print(session_id)
    "
    ```
-   由于 CLI-1 每次新建，hooks 只会在 raw/ 下创建一个新目录，差集即为本次 session_id。
 3. 收集所有 run_id（从训练循环中记录的 run_id 列表）
 4. 写入轮次状态（含 session_id 和所有 run_ids）:
    ```bash
    python3 -c "
+   import os
    from traj_opt.round_state import RoundState
    rs = RoundState()
    path = rs.write_training_complete(
        round_num={N},
        run_id='{final_run_id}',
        reward={final_reward},
-       session_id='{session_id}',
+       session_id=os.environ.get('TRAJ_SESSION_ID', 'unknown'),
        run_ids={run_ids_list},
        success=True
    )

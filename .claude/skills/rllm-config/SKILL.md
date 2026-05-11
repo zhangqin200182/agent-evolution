@@ -75,6 +75,22 @@ if config_unchanged_from_previous:
 
 这确保即使配置相同，每轮训练也使用不同的训练数据排列，产生独立的 reward 数据点。
 
+### 初始 difficulty 推荐
+
+生成初始配置时，如果满足以下条件，自动提升 difficulty:
+
+| 条件 | 推荐 difficulty |
+|------|----------------|
+| 0.5B 模型 + num_problems <= 32 + math task | hard |
+| 0.5B 模型 + num_problems > 32 + math task | mixed |
+| 1.5B+ 模型 | mixed (默认) |
+
+如果同一模型 + 相同 difficulty 的历史训练 reward 全程 >= 0.95，自动提升:
+- mixed → hard
+- simple → mixed
+
+此规则在初始配置生成时检查，不依赖调参循环。
+
 ## 模式二：调参优化
 
 根据 rllm-analyze 阶段的分析结果，调整配置参数。
@@ -133,6 +149,18 @@ if config_unchanged_from_previous:
 difficulty 参数扩展:
 - `"mixed-hard"`: 50% simple + 50% hard（新增，介于 mixed 和 hard 之间）
 
+### Reward 饱和处理
+
+当分析结果显示 reward=1.0 且 loss 接近 0 时，问题不在超参而在数据难度:
+
+| 条件 | 建议 | 原因 |
+|------|------|------|
+| reward=1.0, loss=0, difficulty=simple | 切换到 mixed | 简单题已掌握，引入挑战 |
+| reward=1.0, loss=0, difficulty=mixed | 增加 hard 比例或切换到 hard | mixed 中的 hard 题比例不足 |
+| reward=1.0, loss=0, difficulty=hard | 训练完成，模型已达上限 | 无需继续训练 |
+
+此规则优先级高于其他调参建议 — 当 reward 已饱和时，调整 lr/epochs 无意义。
+
 当 difficulty=mixed 时，0.5B 模型的 num_problems 安全上限:
 
 | 参数 | 原上限 | 新上限 | 条件 | 依据 |
@@ -144,6 +172,32 @@ difficulty 参数扩展:
 - 预期: reward 稳定在 0.8-1.0 范围
 
 警告: num_problems >= 64 在 mixed difficulty 下会导致 catastrophic forgetting，即使 lr=5e-6 且 epochs=1。
+
+#### Seed 配置
+
+- 默认使用随机 seed（`int(time.time()) % 100000`），确保每轮训练使用不同的问题集
+- 如果用户明确指定 seed（如 "seed=42"），则使用用户指定值
+- 调参循环中，每轮自动使用不同 seed，避免过拟合到特定问题集
+
+#### Seed 配置
+
+- 默认使用随机 seed（`int(time.time()) % 100000`），确保每轮训练使用不同的问题集
+- 如果用户明确指定 seed（如 "seed=42"），则使用用户指定值
+- 调参循环中，每轮自动使用不同 seed，避免过拟合到特定问题集
+
+当 num_problems >= 40 且 difficulty=mixed 时，0.5B 模型的安全范围进一步收紧:
+
+| 参数 | 原上限 | 新上限 | 条件 | 依据 |
+|------|--------|--------|------|------|
+| num_problems | 32 | 24 | difficulty=mixed 且 model=0.5B | lr=5e-6 + 1 epoch + 40 problems 仍在 step 21 开始 entropy 爆增和 reward 衰退 |
+| learning_rate | 5e-6 | 3e-6 | num_problems >= 40 且 model=0.5B | 5e-6 不足以防止 40 problems 时的后半段衰退 |
+
+推荐配置 (0.5B + mixed + 快速验证):
+- num_problems=24, lr=5e-6, epochs=1, batch=2, generations=4
+- 预期: 6 步训练，reward 稳定不崩溃
+
+替代方案: 保持 num_problems=40 但 lr=3e-6
+- 适用于需要更多训练步数观察趋势的场景
 
 ## 配置预检（生成配置后、启动前执行）
 

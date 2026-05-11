@@ -208,6 +208,22 @@ Monitor 检测到以下条件时，向编排层发送 STOP 建议:
 
 注: 此检测基于 Round 3 单轮数据（35m vs 历史 7-10m），置信度低，需更多数据验证。
 
+### Reward 骤降检测（Catastrophic Forgetting 快速识别）
+
+| 异常 | 检测方式 | 处理 |
+|------|---------|------|
+| Reward 骤降 | 前一步 reward >= 0.5 且当前步 reward = 0.0，持续 3 步 | 立即建议 STOP，诊断为 catastrophic forgetting |
+
+检测逻辑:
+- 维护 prev_nonzero_reward 变量（最近一次 reward > 0 的值）
+- 当 reward 从 >= 0.5 在 1 步内降到 0.0 时开始计数
+- 连续 3 步 reward = 0.0 则发出 STOP 建议
+- 消息: "Reward 从 X 骤降到 0.0 并持续 3 步，疑似 catastrophic forgetting，建议立即停止"
+
+与现有"连续 5 步 reward=0"规则的区别:
+- 现有规则: 适用于训练从未学到东西的场景（reward 始终为 0）
+- 新规则: 适用于训练曾经有效但突然崩溃的场景（从高位骤降）
+
 ## 训练完成检测
 
 训练完成的标志：

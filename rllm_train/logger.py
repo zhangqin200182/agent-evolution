@@ -40,6 +40,32 @@ class TrainingLogger:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             self._log_file = open(log_file, "w")
 
+        self._heartbeat_path = os.environ.get("TRAJ_HEARTBEAT_PATH")
+        self._run_id = ""
+
+    def _write_heartbeat(self, step: int, reward: float):
+        if not self._heartbeat_path:
+            return
+        import json
+        import tempfile
+        data = {
+            "run_id": self._run_id,
+            "phase": "training",
+            "step": f"{step}/{self.total_steps}" if self.total_steps else str(step),
+            "reward": round(reward, 4),
+            "message": f"step {step}/{self.total_steps} reward={reward:.3f}",
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        try:
+            dir_path = os.path.dirname(self._heartbeat_path)
+            os.makedirs(dir_path, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.rename(tmp, self._heartbeat_path)
+        except OSError:
+            pass
+
     def _print(self, text=""):
         print(text)
         if self._log_file:
@@ -64,6 +90,7 @@ class TrainingLogger:
 
     def log_training_start(self, config):
         self.start_time = time.time()
+        self._run_id = getattr(config, "run_id", "")
         self._print(config.summary())
         self._print()
 
@@ -136,6 +163,7 @@ class TrainingLogger:
         self._print_step_row(rec)
         self.step_records.append(rec)
         self._current = None
+        self._write_heartbeat(rec.step, rec.avg_reward)
 
     # ── Called from RllmCallback.on_log ──────────────────────
 
@@ -207,6 +235,30 @@ class TrainingLogger:
         if config.save_model:
             self._print(f"    Model:          {os.path.join(output_dir, 'final_model/')}")
         self._print("=" * 60)
+
+        final_reward = self.step_records[-1].avg_reward if self.step_records else 0.0
+        self._write_round_status(config, final_reward)
+
+    def _write_round_status(self, config, final_reward: float):
+        """Fallback: write status.json directly from training process."""
+        round_num = os.environ.get("TRAJ_ROUND_NUM")
+        if not round_num:
+            return
+        try:
+            from traj_opt.round_state import RoundState
+            rs = RoundState()
+            existing = rs.read_status(int(round_num))
+            if existing and existing.get("status") == "training_complete":
+                return
+            rs.write_training_complete(
+                round_num=int(round_num),
+                run_id=config.run_id,
+                reward=final_reward,
+                session_id=os.environ.get("TRAJ_SESSION_ID", "unknown"),
+                run_ids=[config.run_id],
+            )
+        except Exception:
+            pass
 
     def _print_reward_trend(self, records):
         rewards = [r.avg_reward for r in records]

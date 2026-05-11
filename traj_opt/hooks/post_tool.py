@@ -7,6 +7,7 @@ converts via HooksAdapter, and appends to the session's events file.
 Must complete within 1 second. Fails silently to avoid disrupting Claude Code.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -49,6 +50,10 @@ def main() -> None:
         adapter = HooksAdapter()
         event = adapter.adapt("PostToolUse", stdin_json)
         event.layer = layer
+
+        session_override = os.environ.get("TRAJ_SESSION_ID")
+        if session_override:
+            event.session_id = session_override
 
         writer = EventWriter(config)
         writer.write_event(event)

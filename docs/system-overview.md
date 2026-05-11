@@ -4,20 +4,25 @@
 
 > 命名说明：文档中 `rllm_train` 指代训练后端（代码目录 `rllm_train/`），`traj_opt` 指代优化后端（代码目录 `traj_opt/`）。
 
-## 1. 四层架构
+## 1. 五层架构
 
 | 层 | 模块 | 代码目录 | 职责 |
 |----|------|---------|------|
-| 训练后端 | rllm_train | `rllm_train/` | Agent RL 训练 pipeline：模型加载、rollout、GRPO 训练、reward 计算 |
+| 共享库 | rllm_common | `rllm_common/` | Agent/Env 核心抽象、工具定义、解析器 — 所有训练后端共用 |
+| TRL 训练后端 | rllm_train | `rllm_train/` | 单 GPU TRL/GRPO 训练（Mac/CPU 兼容，开发调试用） |
+| veRL 训练后端 | rllm_verl | `rllm_verl/` | 多 GPU veRL 分布式训练（AutoDL/集群，生产训练用） |
 | 优化后端 | traj_opt | `traj_opt/` | 轨迹捕获、存储、分割、分析基础设施、patch 生成 |
 | Skill 管理 | skill-bank | `skill-bank/` | base + patch + compile 架构，管理 skill 的版本和优化 |
 | Skills | rllm-xx / traj-xx | `skill-bank/rllm/` / `skill-bank/traj/` | 两组 Claude Code skill，是系统的使用入口 |
+| 部署 | deploy | `deploy/` | AutoDL 一键部署脚本（setup + run） |
 
 各层关系：
-- **rllm_train** 是独立可运行的训练代码，不依赖其他层
+- **rllm_common** 是零依赖共享库，提供 Agent/Env/Tool 核心抽象
+- **rllm_train** 和 **rllm_verl** 都依赖 rllm_common，分别面向单 GPU 和多 GPU 场景
 - **traj_opt** 是 traj-xx skills 的 Python 后端，提供捕获/存储/分割/分析/优化的基础设施
 - **skill-bank** 是通用的 skill 管理系统，不绑定具体 skill
 - **rllm-xx skills** 编排 rllm_train 执行训练；**traj-xx skills** 编排 traj_opt 分析轨迹并优化 rllm-xx skills
+- **deploy** 提供 AutoDL 一键部署脚本，支持 veRL 和 TRL 两种训练模式
 
 ## 2. 数据流
 

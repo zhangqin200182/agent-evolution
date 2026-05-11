@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python trajectory/hooks/on_stop.py --subagent"
+            "command": "python traj_opt/hooks/on_stop.py --subagent"
           }
         ]
       }

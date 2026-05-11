@@ -18,6 +18,11 @@ active:
 - traj-20260504-151735-initial-config
 - traj-20260504-151735-param-ranges
 - traj-20260504-161626-param-ranges
+- traj-20260505-140802-param-ranges
+- traj-20260505-143348-param-ranges
+- traj-20260506-080408-param-ranges
+- traj-20260506-082351-tuning
+- traj-20260506-112523-initial-config
 base: base.md
 disabled:
 - traj-20260502-213850-late-forgetting-tuning
