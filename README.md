@@ -77,8 +77,12 @@ python -m rllm_remote.train --ssh-host <server-ip> --ssh-password "xxx" \
 # 监控训练进度（含 reward 趋势、性能、异常检测）
 python -m rllm_remote.monitor <run_id> --pid <PID> --ssh-password "xxx" --watch
 
-# 训练完成后分析结果
-python -m rllm_remote.monitor <run_id> --ssh-password "xxx" --analyze
+# 训练完成后，精度分析 + 调参重训闭环
+python -m rllm_remote.accuracy_analyzer <run_id> --ssh-password "xxx"
+# → 生成分析报告 (accuracy_report.md) + 调参建议
+# → 逐条审批后自动修改 config.json
+python -m rllm_remote.train rllm_remote/output/runs/<run_id>/config.json --ssh-password "xxx"
+# → 使用优化后的配置重新训练
 ```
 
 支持 Qwen2.5-7B 模型，8 卡 NPU，GSM8K/MATH 数据集。详见 `docs/rllm-remote-design.md`。
@@ -150,9 +154,11 @@ flowchart LR
 | `rllm-config` | 生成初始配置 / 根据分析结果自动调参 |
 | `rllm-run` | 后台启动训练进程 |
 | `rllm-monitor` | 实时监控训练进度，检测异常（loss 爆炸、OOM、进程崩溃） |
-| `rllm-analyze` | 分析训练结果，生成调参建议（含决策树，支持远程模式） |
+| `rllm-analyze` | 分析本地训练结果，生成调参建议（含决策树） |
+| `rllm-analyze-accuracy` | 远程训练精度分析：44 个 TB 指标、15 条异常检测、5 维健康评分、逐条审批修改 |
 | `rllm-remote-run` | 远程 NPU 训练启动（SSH + AgentSDK） |
 | `rllm-remote-monitor` | 远程 NPU 训练监控（TB events + 日志，含评估与建议） |
+| `rllm-remote-connect` | 远程服务器 SSH 连接管理（标准化连接、验证、故障排查） |
 
 **三种使用模式**:
 
@@ -284,6 +290,7 @@ train.py → GRPOTrainer → rollout_func → HFAgentExecutionEngine → agent/e
 | `config_generator.py` | 基于容器参考配置生成 AgentSDK YAML |
 | `train.py` | CLI 入口：上传配置、nohup 后台启动训练 |
 | `monitor.py` | `RemoteMonitor`：TB events + 训练日志双源监控、轨迹分析 |
+| `accuracy_analyzer.py` | `AccuracyAnalyzer`：44 个精度 TB 指标抓取、15 条异常检测、5 维健康评分、报告生成 |
 
 ### traj_opt（优化后端）
 
@@ -339,6 +346,7 @@ python skill-bank/compile.py --diff rllm-config
 - `docs/rllm-skill-changelog.md` — rllm skill 系统演进记录
 - `docs/rllm-remote-design.md` — 远程 NPU 训练后端设计（架构、模块、技能集成）
 - `docs/rllm-remote-monitor-design.md` — 远程训练监控系统设计（TB + 日志双源、评估建议）
+- `docs/rllm-analyze-accuracy-design.md` — 远程训练精度分析 skill 设计（三层模型、TB 指标模型、算法配置模型、诊断引擎）
 
 ## License
 
