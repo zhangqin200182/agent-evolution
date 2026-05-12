@@ -20,6 +20,12 @@ groups:
         output: .claude/skills/rllm-remote-run/SKILL.md
       rllm-remote-monitor:
         output: .claude/skills/rllm-remote-monitor/SKILL.md
+      rllm-config-check:
+        output: .claude/skills/rllm-config-check/SKILL.md
+      rllm-remote-connect:
+        output: .claude/skills/rllm-remote-connect/SKILL.md
+      rllm-analyze-accuracy:
+        output: .claude/skills/rllm-analyze-accuracy/SKILL.md
 
   traj:
     description: "trajectory 轨迹捕获、分析与 skill 优化"
